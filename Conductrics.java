@@ -1,4 +1,4 @@
-//vim: g:syntastic_java_javac_classpath="./json-20190722.jar"
+//vim: let g:syntastic_java_javac_classpath="./json-20190722.jar"
 
 package com.conductrics.http;
 
@@ -25,6 +25,7 @@ public class Conductrics {
 
 	private String apiUrl;
 	private String apiKey;
+
 	public Conductrics(String apiUrl, String apiKey) {
 		this.apiUrl = apiUrl;
 		this.apiKey = apiKey;
@@ -66,50 +67,51 @@ public class Conductrics {
 		}
 	}
 
-	protected static void log(String line) { System.out.println("Conductrics: " + line); }
+	private static void log(String line) { System.out.println("Conductrics: " + line); }
 
-	private String readAll(InputStream s) {
-		java.util.Scanner sc = new java.util.Scanner(s).useDelimiter("\\A");
-		return sc.hasNext() ? sc.next() : "";
-	}
-	private void writeAll(String data, OutputStream out) throws IOException {
-		DataOutputStream o = new DataOutputStream( out );
-		o.writeBytes( data );
-		o.flush();
-		o.close();
-	}
-
-	private String httpPost(String url, String body, Map<String, String> headers) {
-		Conductrics.log("POST: " + body + " " + url);
-		URL u;
-		HttpURLConnection conn;
-		try {
-			u = new URL(url);
-		} catch( MalformedURLException e ) {
-			Conductrics.log("MalformedURLException(url="+url+"): "+e.toString());
-			return null;
+	private static class Util {
+		private static String readAll(InputStream s) {
+			java.util.Scanner sc = new java.util.Scanner(s).useDelimiter("\\A");
+			return sc.hasNext() ? sc.next() : "";
 		}
-		try {
-			conn = (HttpURLConnection)u.openConnection();
-			conn.setRequestMethod("POST");
-			if( headers != null ) {
-				for( String key : headers.keySet() ) {
-					conn.setRequestProperty(key, headers.get(key));
-				}
+		private static void writeAll(String data, OutputStream out) throws IOException {
+			DataOutputStream o = new DataOutputStream( out );
+			o.writeBytes( data );
+			o.flush();
+			o.close();
+		}
+		private static String httpPost(String url, String body, Map<String, String> headers) {
+			Conductrics.log("POST: " + body + " " + url);
+			URL u;
+			HttpURLConnection conn;
+			try {
+				u = new URL(url);
+			} catch( MalformedURLException e ) {
+				Conductrics.log("MalformedURLException(url="+url+"): "+e.toString());
+				return null;
 			}
-			conn.setUseCaches( false );
-			conn.setDoInput( true );
-			conn.setDoOutput( true );
-		} catch( IOException e ) {
-			Conductrics.log("IOException(url="+url+"): "+e.toString());
-			return null;
-		}
-		try {
-			writeAll( body, conn.getOutputStream() );
-			return readAll( conn.getInputStream() );
-		} catch( IOException e ) {
-			Conductrics.log("IOException(url="+url+"): "+e.toString() + readAll( conn.getErrorStream() ));
-			return null;
+			try {
+				conn = (HttpURLConnection)u.openConnection();
+				conn.setRequestMethod("POST");
+				if( headers != null ) {
+					for( String key : headers.keySet() ) {
+						conn.setRequestProperty(key, headers.get(key));
+					}
+				}
+				conn.setUseCaches( false );
+				conn.setDoInput( true );
+				conn.setDoOutput( true );
+			} catch( IOException e ) {
+				Conductrics.log("IOException(url="+url+"): "+e.toString());
+				return null;
+			}
+			try {
+				Util.writeAll( body, conn.getOutputStream() );
+				return Util.readAll( conn.getInputStream() );
+			} catch( IOException e ) {
+				Conductrics.log("IOException(url="+url+"): "+e.toString() + Util.readAll( conn.getErrorStream() ));
+				return null;
+			}
 		}
 	}
 
@@ -131,7 +133,7 @@ public class Conductrics {
 					Conductrics.log("Failed to produce a valid API url: " + e.getLocalizedMessage());
 				}
 			}
-			String responseBody = httpPost(url, body, headers);
+			String responseBody = Util.httpPost(url, body, headers);
 			if( responseBody != null ) {
 				Conductrics.log("POST response: " + responseBody);
 				JSONObject result = new JSONObject(responseBody);
@@ -154,9 +156,7 @@ public class Conductrics {
 		return response.getSelection( agentCode );
 	}
 
-	public GoalResponse Reward(RequestOptions opts, String goalCode ) {
-		return Reward( opts, goalCode, 1.0 );
-	}
+	public GoalResponse Reward(RequestOptions opts, String goalCode ) { return Reward( opts, goalCode, 1.0 ); }
 	public GoalResponse Reward(RequestOptions opts, String goalCode, Double value) {
 		JSONArray commands = new JSONArray().put(new JSONObject().put("g", goalCode).put("v", value));
 		ExecResponse response = this.Exec( opts, commands );
