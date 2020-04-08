@@ -116,9 +116,9 @@ public class Conductrics {
 	}
 
 	public ExecResponse Exec( RequestOptions opts, JSONArray commands) { return new ExecResponse(exec(opts, commands)); }
-  private JSONObject exec( RequestOptions opts, JSONArray commands) {
-    try {
-      String body = "{ \"commands\": " + commands.toString() + " }";
+	private JSONObject exec( RequestOptions opts, JSONArray commands) {
+		try {
+			String body = "{ \"commands\": " + commands.toString() + " }";
 			HashMap<String, String> headers = new HashMap<String, String>();
 			headers.put("content-type", "application/json");
 			headers.put("content-length", String.format("%d", body.length()));
@@ -144,11 +144,11 @@ public class Conductrics {
 					return result.getJSONObject("data");
 				}
 			}
-    } catch (JSONException err ) {
-      Conductrics.log("JSONException in exec(): " + err.getLocalizedMessage());
-    }
-    return null;
-  }
+		} catch (JSONException err ) {
+			Conductrics.log("JSONException in exec(): " + err.getLocalizedMessage());
+		}
+		return null;
+	}
 
 	public SelectResponse Select(RequestOptions opts, String agentCode) {
 		JSONArray commands = new JSONArray().put(new JSONObject().put("a", agentCode));
