@@ -10,8 +10,9 @@ public class ConductricsTest {
 		Conductrics.RequestOptions session = new Conductrics.RequestOptions()
 			.session(sessionId)         // Required
 			.ua("My Custom User-Agent") // Optional
+			.timeout(2000)              // Optional
 			.traits("F1", "F2")         // Optional
-			.withParam("debug", "true");// Optional, repeatable
+			.withParam("debug", "true");// Optional, repeatable, adds arbitrary URL params
 		Conductrics.SelectResponse outcome = api.Select( session, "a-example" );
 		Conductrics.GoalResponse goal = api.Reward( session, "g-example", 1.0 );
 	}
