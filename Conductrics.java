@@ -32,8 +32,13 @@ public class Conductrics {
 	}
 
 	public static class RequestOptions {
-		private List<String> _traits = null;
+
+		// Ultimately, a set of RequestOptions will become parameters to an HTTP request
 		private Map<String, String> _params = new HashMap<String, String>();
+		// Traits are a special set of parameters that we have to serialize differently
+		private List<String> _traits = null;
+		// Timeout is just an internal option, and not sent with the params
+		private int _timeout = 0;
 
 		public String session() { return _params.get("session"); }
 		public RequestOptions session(String s) {
@@ -65,6 +70,13 @@ public class Conductrics {
 			_params.put(key, value);
 			return this;
 		}
+
+		public int timeout() { return _timeout; }
+		public RequestOptions timeout(int ms) {
+			_timeout = ms;
+			return this;
+		}
+
 	}
 
 	private static void log(String line) { System.out.println("Conductrics: " + line); }
@@ -80,16 +92,22 @@ public class Conductrics {
 			o.flush();
 			o.close();
 		}
-		private static String httpPost(String url, String body, Map<String, String> headers) {
+		private static String httpPost(String url, String body, int timeout, Map<String, String> headers) {
 			Conductrics.log("POST: " + body + " " + url);
 			URL u;
 			HttpURLConnection conn;
+
+			if( url == null ) return null;
+			if( body == null ) body = "";
+
+			// Try to parse the given URL safely.
 			try {
 				u = new URL(url);
 			} catch( MalformedURLException e ) {
 				Conductrics.log("MalformedURLException(url="+url+"): "+e.toString());
 				return null;
 			}
+
 			try {
 				conn = (HttpURLConnection)u.openConnection();
 				conn.setRequestMethod("POST");
@@ -98,6 +116,10 @@ public class Conductrics {
 						conn.setRequestProperty(key, headers.get(key));
 					}
 				}
+				conn.setConnectTimeout(1000); // we shouldn't have to wait long just to get a socket
+				if( timeout > 0 ) {
+					conn.setReadTimeout(timeout); // we may have to wait for the server response though, once connected
+				}
 				conn.setUseCaches( false );
 				conn.setDoInput( true );
 				conn.setDoOutput( true );
@@ -105,8 +127,15 @@ public class Conductrics {
 				Conductrics.log("IOException(url="+url+"): "+e.toString());
 				return null;
 			}
+
 			try {
 				Util.writeAll( body, conn.getOutputStream() );
+			} catch( IOException e ) {
+				Conductrics.log("IOException(url="+url+"): "+e.toString() + Util.readAll( conn.getErrorStream() ));
+				return null;
+			}
+
+			try {
 				return Util.readAll( conn.getInputStream() );
 			} catch( IOException e ) {
 				Conductrics.log("IOException(url="+url+"): "+e.toString() + Util.readAll( conn.getErrorStream() ));
@@ -133,7 +162,7 @@ public class Conductrics {
 					Conductrics.log("Failed to produce a valid API url: " + e.getLocalizedMessage());
 				}
 			}
-			String responseBody = Util.httpPost(url, body, headers);
+			String responseBody = Util.httpPost(url, body, opts.timeout(), headers);
 			if( responseBody != null ) {
 				Conductrics.log("POST response: " + responseBody);
 				JSONObject result = new JSONObject(responseBody);
