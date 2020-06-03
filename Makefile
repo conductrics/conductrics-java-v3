@@ -1,8 +1,22 @@
 
-all: com/conductrics/http/Conductrics.class com/conductrics/http/ConductricsTest.class
+VERSION=$(shell cat VERSION)
 
-com/conductrics/http/%.class: %.java
-	javac -classpath "json-20190722.jar:." -d . $<
+all: Conductrics-${VERSION}.jar
 
-test: all
-	java -classpath "json-20190722.jar:." com.conductrics.http.ConductricsTest
+com/conductrics/%.class: %.java org/json/JSONObject.class
+	javac -classpath "." -d . $<
+
+org/json/%: json-20190722.jar
+	jar xf $<
+	touch $@
+
+Conductrics-${VERSION}.jar: com/conductrics/Conductrics.class org/json/JSONObject.class
+	jar cf $@ com/conductrics/Conductrics.class org/json/*.class
+
+test: all com/conductrics/Test.class
+	java -classpath "Conductrics-${VERSION}.jar:." com.conductrics.Test
+
+clean:
+	rm -rf org/json com/conductrics Conductrics.jar Conductrics-${VERSION}.jar META-INF/
+
+.PHONY: test clean
