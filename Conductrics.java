@@ -1,6 +1,7 @@
 //vim: let g:syntastic_java_javac_classpath="./json-20190722.jar"
 
-package com.conductrics.http;
+package com.conductrics;
+
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -21,7 +22,28 @@ import java.io.DataOutputStream;
 import java.io.OutputStream;
 import java.io.InputStream;
 
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+
 public class Conductrics {
+
+	public static interface Callback<T> {
+		public void onValue(T value);
+	}
+
+	private static void log(String line) { System.out.println("Conductrics: " + line); }
+	private static void writeAll(String data, OutputStream out) throws IOException {
+		DataOutputStream o = new DataOutputStream( out );
+		o.writeBytes( data );
+		o.flush();
+		o.close();
+	}
+	private static String readAll(InputStream s) {
+		java.util.Scanner sc = new java.util.Scanner(s).useDelimiter("\\A");
+		return sc.hasNext() ? sc.next() : "";
+	}
 
 	private String apiUrl;
 	private String apiKey;
@@ -32,164 +54,230 @@ public class Conductrics {
 	}
 
 	public static class RequestOptions {
+		private HashMap<String, String> params = new HashMap<String, String>(); // Ultimately, a set of RequestOptions will become parameters to an HTTP request
+		private HashMap<String, String> input = new HashMap<String, String>();
+		private List<String> _traits = null; // Traits are a special set of parameters that we have to serialize differently
+		private int _timeout = 0; // Timeout is just an internal option, and not sent with the params
+		private String defaultOption = "A"; // not currently settable
+		private HashMap<String, String> defaultOptions = new HashMap<String, String>();
+		private HashMap<String, String> forceOptions = new HashMap<String, String>();
 
-		// Ultimately, a set of RequestOptions will become parameters to an HTTP request
-		private Map<String, String> _params = new HashMap<String, String>();
-		// Traits are a special set of parameters that we have to serialize differently
-		private List<String> _traits = null;
-		// Timeout is just an internal option, and not sent with the params
-		private int _timeout = 0;
-
-		public String session() { return _params.get("session"); }
-		public RequestOptions session(String s) {
-			_params.put("session", s);
+		public String getSession() { return params.get("session"); }
+		public RequestOptions setSession(String s) {
+			params.put("session", s);
 			return this;
 		}
 
-		public String ua() { return _params.get("ua"); }
-		public RequestOptions ua(String s) {
-			_params.put("ua", s);
+		public String getUserAgent() { return params.get("ua"); }
+		public RequestOptions setUserAgent(String s) {
+			params.put("ua", s);
 			return this;
 		}
 
-		public List<String> traits() { return _traits; }
-		public RequestOptions traits(List<String> v) {
-			_params.put("traits", String.join(",", v));
-			return this;
-		}
-		public RequestOptions traits(String ... v) {
-			_params.put("traits", String.join(",", v));
+		public String getInput(String key) { return input.get(key); }
+		public RequestOptions setInput(String key, String val) {
+			input.put(key, val);
 			return this;
 		}
 
-		public Map<String, String> getParams() { return _params; }
-		public RequestOptions withParam(String key, String value) {
-			if( _params == null ) {
-				_params = new HashMap<String, String>();
-			}
-			_params.put(key, value);
+		public List<String> getTraits() { return _traits; }
+		public RequestOptions setTraits(List<String> v) {
+			params.put("traits", String.join(",", v));
+			return this;
+		}
+		public RequestOptions setTraits(String ... v) {
+			params.put("traits", String.join(",", v));
 			return this;
 		}
 
-		public int timeout() { return _timeout; }
-		public RequestOptions timeout(int ms) {
+		public Map<String, String> getParams() { return new HashMap<String, String>(params); }
+		public RequestOptions setParam(String key, String value) {
+			params.put(key, value);
+			return this;
+		}
+
+		public int getTimeout() { return _timeout; }
+		public RequestOptions setTimeout(int ms) {
 			_timeout = ms;
 			return this;
 		}
 
+		public String getDefault() { return defaultOption; }
+		public String getDefault(String agentCode) { return defaultOptions.get(agentCode); }
+		public RequestOptions setDefault(String agentCode, String optionCode) {
+			defaultOptions.put(agentCode, optionCode);
+			return this;
+		}
+
+		public String getForcedOutcome(String agentCode) { return forceOptions.get(agentCode); }
+		public RequestOptions forceOutcome(String agentCode, String optionCode) {
+			forceOptions.put(agentCode, optionCode);
+			return this;
+		}
 	}
+	private static class HTTP {
+		// use a small thread-pool to handle all our HTTP Requests asynchronously
+		private static ThreadPoolExecutor executor = new ThreadPoolExecutor(0, 10, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
 
-	private static void log(String line) { System.out.println("Conductrics: " + line); }
-
-	private static class Util {
-		private static String readAll(InputStream s) {
-			java.util.Scanner sc = new java.util.Scanner(s).useDelimiter("\\A");
-			return sc.hasNext() ? sc.next() : "";
-		}
-		private static void writeAll(String data, OutputStream out) throws IOException {
-			DataOutputStream o = new DataOutputStream( out );
-			o.writeBytes( data );
-			o.flush();
-			o.close();
-		}
-		private static String httpPost(String url, String body, int timeout, Map<String, String> headers) {
-			Conductrics.log("POST: " + body + " " + url);
-			URL u;
-			HttpURLConnection conn;
-
-			if( url == null ) return null;
-			if( body == null ) body = "";
-
-			// Try to parse the given URL safely.
-			try {
-				u = new URL(url);
-			} catch( MalformedURLException e ) {
-				Conductrics.log("MalformedURLException(url="+url+"): "+e.toString());
-				return null;
+		private static class RequestRunner implements Runnable {
+			private String method;
+			private String url;
+			private String body;
+			private int timeout;
+			private Map<String, String> headers;
+			private Callback<String> callback;
+			public RequestRunner(String method, String url, String body, int timeout, Map<String, String> headers, Callback<String> callback) {
+				this.method = method.toUpperCase();
+				this.url = url;
+				this.body = body;
+				this.timeout = timeout;
+				this.headers = headers;
+				this.callback = callback;
 			}
 
-			try {
-				conn = (HttpURLConnection)u.openConnection();
-				conn.setRequestMethod("POST");
-				if( headers != null ) {
-					for( String key : headers.keySet() ) {
-						conn.setRequestProperty(key, headers.get(key));
+			@Override
+			public void run() {
+				log(method + ": " + body + " " + url);
+				URL u;
+				HttpURLConnection conn;
+				if( url == null ) {
+					log("HTTP RequestRunner url cannot be null, aborting request");
+					callback.onValue( null );
+					return;
+				}
+
+				if( method == "POST" && body == null ) body = "";
+
+				// Try to parse the given URL safely.
+				try {
+					u = new URL(url);
+				} catch( MalformedURLException e ) {
+					log("MalformedURLException(url="+url+"): "+e.toString());
+					callback.onValue( null );
+					return;
+				}
+
+				try {
+					conn = (HttpURLConnection)u.openConnection();
+					conn.setRequestMethod(method);
+					if( headers != null ) {
+						for( String key : headers.keySet() ) {
+							conn.setRequestProperty(key, headers.get(key));
+						}
 					}
+					conn.setConnectTimeout(1000); // we shouldn't have to wait long just to get a socket
+					if( timeout > 0 ) {
+						conn.setReadTimeout(timeout); // we may have to wait for the server response though, once connected
+					}
+					conn.setUseCaches( false );
+					conn.setDoInput( true );
+					if( body != null ) {
+						conn.setDoOutput( true );
+					}
+				} catch( IOException e ) {
+					log("IOException("+method+" "+url+"): "+e.toString());
+					callback.onValue( null );
+					return;
 				}
-				conn.setConnectTimeout(1000); // we shouldn't have to wait long just to get a socket
-				if( timeout > 0 ) {
-					conn.setReadTimeout(timeout); // we may have to wait for the server response though, once connected
+
+				try {
+					if( body != null ) writeAll( body, conn.getOutputStream() );
+				} catch( IOException e ) {
+					log("IOException("+method+" "+url+"): "+e.toString() + " " + readAll( conn.getErrorStream() ));
+					callback.onValue( null );
+					return;
 				}
-				conn.setUseCaches( false );
-				conn.setDoInput( true );
-				conn.setDoOutput( true );
-			} catch( IOException e ) {
-				Conductrics.log("IOException(url="+url+"): "+e.toString());
-				return null;
-			}
 
-			try {
-				Util.writeAll( body, conn.getOutputStream() );
-			} catch( IOException e ) {
-				Conductrics.log("IOException(url="+url+"): "+e.toString() + Util.readAll( conn.getErrorStream() ));
-				return null;
+				try {
+					callback.onValue( readAll( conn.getInputStream() ));
+				} catch( IOException e ) {
+					log("IOException("+method+" "+url+"): "+e.toString() + readAll( conn.getErrorStream() ));
+					callback.onValue( null );
+					return;
+				}
 			}
+		}
 
-			try {
-				return Util.readAll( conn.getInputStream() );
-			} catch( IOException e ) {
-				Conductrics.log("IOException(url="+url+"): "+e.toString() + Util.readAll( conn.getErrorStream() ));
-				return null;
+		public static void request(String method, String url, String body, int timeout, Map<String, String> headers, Callback<String> callback) {
+			if( executor.isShutdown() || executor.isTerminated() || executor.isTerminating() ) {
+				callback.onValue( null );
+			} else {
+				executor.execute( new RequestRunner(method, url, body, timeout, headers, callback) );
 			}
 		}
 	}
 
-	public ExecResponse Exec( RequestOptions opts, JSONArray commands) { return new ExecResponse(exec(opts, commands)); }
-	private JSONObject exec( RequestOptions opts, JSONArray commands) {
+	public void Exec( RequestOptions opts, JSONArray commands, Callback<ExecResponse> callback) {
+		exec(opts, commands, new Callback<JSONObject>() {
+			public void onValue(JSONObject data) {
+				callback.onValue( data == null
+					? null
+					: new ExecResponse( data ));
+			}
+		});
+	}
+	private void exec( RequestOptions opts, JSONArray commands, Callback<JSONObject> callback) {
+		log("exec(" + commands.toString() + ")");
 		try {
 			String body = "{ \"commands\": " + commands.toString() + " }";
 			HashMap<String, String> headers = new HashMap<String, String>();
 			headers.put("content-type", "application/json");
 			headers.put("content-length", String.format("%d", body.length()));
 			String url = apiUrl + "?apikey=" + apiKey;
-			Map<String, String> params = opts.getParams();
-			if( params != null ) {
-				try {
-					for( String key : params.keySet() ) {
-						url += "&"+key+"="+URLEncoder.encode(params.get(key), "utf-8");
+			try {
+				Map<String, String> params = opts.getParams();
+				for( String key : params.keySet() ) {
+					url += "&"+key+"="+URLEncoder.encode(params.get(key), "utf-8");
+				}
+			} catch( java.io.UnsupportedEncodingException e) {
+				log("Failed to produce a valid API url: " + e.getLocalizedMessage());
+				callback.onValue( null );
+				return;
+			}
+			HTTP.request("POST", url, body, opts.getTimeout(), headers,
+				new Callback<String>() {
+					public void onValue(String responseBody) {
+						if( responseBody == null ) {
+							log("Response body is null");
+							callback.onValue( null );
+							return;
+						}
+						log("POST response: " + responseBody);
+						JSONObject result = new JSONObject(responseBody);
+						if( result.getInt("status") == 200 ) {
+							callback.onValue(result.getJSONObject("data"));
+						} else {
+							log("exec failed: " + responseBody);
+						}
 					}
-				} catch( java.io.UnsupportedEncodingException e) {
-					Conductrics.log("Failed to produce a valid API url: " + e.getLocalizedMessage());
 				}
-			}
-			String responseBody = Util.httpPost(url, body, opts.timeout(), headers);
-			if( responseBody != null ) {
-				Conductrics.log("POST response: " + responseBody);
-				JSONObject result = new JSONObject(responseBody);
-				if( result.getInt("status") != 200 ) {
-					Conductrics.log("exec failed: " + responseBody);
-					return null;
-				} else {
-					return result.getJSONObject("data");
-				}
-			}
+			);
 		} catch (JSONException err ) {
-			Conductrics.log("JSONException in exec(): " + err.getLocalizedMessage());
+			log("JSONException in exec(): " + err.getLocalizedMessage());
 		}
-		return null;
 	}
 
-	public SelectResponse Select(RequestOptions opts, String agentCode) {
+	public void Select(RequestOptions opts, String agentCode, Callback<SelectResponse> callback) {
 		JSONArray commands = new JSONArray().put(new JSONObject().put("a", agentCode));
-		ExecResponse response = this.Exec( opts, commands );
-		return response.getSelection( agentCode );
+		this.Exec( opts, commands, new Callback<ExecResponse>() {
+			public void onValue(ExecResponse response) {
+				callback.onValue( response == null
+					? new SelectResponse(agentCode, opts.getDefault(), "x")
+					: response.getSelection( agentCode ));
+			}
+		});
 	}
 
-	public GoalResponse Reward(RequestOptions opts, String goalCode ) { return Reward( opts, goalCode, 1.0 ); }
-	public GoalResponse Reward(RequestOptions opts, String goalCode, Double value) {
+	public void Reward(RequestOptions opts, String goalCode, Callback<GoalResponse> callback) { Reward( opts, goalCode, 1.0, callback ); }
+	public void Reward(RequestOptions opts, String goalCode, Double value, Callback<GoalResponse> callback) {
 		JSONArray commands = new JSONArray().put(new JSONObject().put("g", goalCode).put("v", value));
-		ExecResponse response = this.Exec( opts, commands );
-		return response.getReward( goalCode );
+		this.Exec( opts, commands, new Callback<ExecResponse>() {
+			public void onValue(ExecResponse response) {
+				callback.onValue( response == null
+					? new GoalResponse(goalCode)
+					: response.getReward( goalCode ));
+			}
+		});
 	}
 
 	public static class ExecResponse {
@@ -270,6 +358,7 @@ public class Conductrics {
 		public String getCode() { return c; }
 		public String getPolicy() {
 			switch( p ) {
+				case "x": return "none";
 				case "p": return "paused";
 				case "r": return "random";
 				case "f": return "fixed";
@@ -288,6 +377,9 @@ public class Conductrics {
 	public static class GoalResponse {
 		private String g;
 		private HashMap<String, Double> rs = new HashMap<String, Double>();
+		GoalResponse(String goalCode) {
+			g = goalCode;
+		}
 		GoalResponse(JSONObject item) {
 			try {
 				g = item.getString("g");
