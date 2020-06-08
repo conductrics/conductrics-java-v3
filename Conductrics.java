@@ -80,7 +80,7 @@ public class Conductrics {
 			return this;
 		}
 
-		public List<String> getTraits() { return _traits; }
+		public String[] getTraits() { return params.get("traits").split(","); }
 		public RequestOptions setTraits(List<String> v) {
 			params.put("traits", String.join(",", v));
 			return this;
