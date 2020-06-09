@@ -259,6 +259,11 @@ public class Conductrics {
 	}
 
 	public void Select(RequestOptions opts, String agentCode, Callback<SelectResponse> callback) {
+		String forced = opts.getForcedOutcome(agentCode);
+		if( forced != null ) {
+			callback.onValue( new SelectResponse(agentCode, forced, "x") );
+			return;
+		}
 		JSONArray commands = new JSONArray().put(new JSONObject().put("a", agentCode));
 		this.Exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
