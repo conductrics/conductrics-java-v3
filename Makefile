@@ -14,7 +14,7 @@ Conductrics-${VERSION}.jar: com/conductrics/Conductrics.class org/json/JSONObjec
 	jar cf $@ com/conductrics/Conductrics.class org/json/*.class
 
 test: all com/conductrics/Test.class
-	java -classpath "Conductrics-${VERSION}.jar:." com.conductrics.Test
+	java -ea -classpath "Conductrics-${VERSION}.jar:." com.conductrics.Test
 
 clean:
 	rm -rf org/json com/conductrics Conductrics.jar Conductrics-${VERSION}.jar META-INF/
