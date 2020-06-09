@@ -19,11 +19,12 @@ public class Test {
 		// queue them all up, once the queue drains, the process will exit with code 0
 		executor.execute(new TestCase());
 		executor.execute(new SessionIsSticky());
-		executor.execute(new TraitsWork());
-		executor.execute(new ParamsWork());
+		executor.execute(new TraitsTest());
+		executor.execute(new ParamsTest());
 		executor.execute(new DefaultOptionForInvalidAgent());
-		executor.execute(new UserAgentWorks());
-		executor.execute(new InputsWork());
+		executor.execute(new UserAgentTest());
+		executor.execute(new InputsTest());
+		executor.execute(new ForceOutcomeTest());
 	}
 
 	public static void _assertEqual(String a, String b) throws AssertionError {
@@ -97,7 +98,7 @@ public class Test {
 		}
 	}
 
-	public static class TraitsWork extends TestCase {
+	public static class TraitsTest extends TestCase {
 		@Override public void run() {
 			started = true;
 			RequestOptions opts = new RequestOptions()
@@ -120,7 +121,7 @@ public class Test {
 		}
 	}
 
-	public static class ParamsWork extends TestCase {
+	public static class ParamsTest extends TestCase {
 		@Override public void run() {
 			started = true;
 			RequestOptions opts = new RequestOptions()
@@ -164,7 +165,7 @@ public class Test {
 		}
 	}
 
-	public static class UserAgentWorks extends TestCase {
+	public static class UserAgentTest extends TestCase {
 		@Override public void run() {
 			started = true;
 			RequestOptions opts = new RequestOptions()
@@ -188,7 +189,7 @@ public class Test {
 		}
 	}
 
-	public static class InputsWork extends TestCase {
+	public static class InputsTest extends TestCase {
 		@Override public void run() {
 			started = true;
 			RequestOptions opts = new RequestOptions()
@@ -212,4 +213,25 @@ public class Test {
 		}
 	}
 
+	public static class ForceOutcomeTest extends TestCase {
+		@Override public void run() {
+			started = true;
+			RequestOptions opts = new RequestOptions()
+				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+				.forceOutcome( "a-example", "D"); // can specify a (normally) impossible outcome
+			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						_assertEqual( outcome.getCode(), "D" );
+						_assertEqual( outcome.getPolicy(), "none");
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
 }
