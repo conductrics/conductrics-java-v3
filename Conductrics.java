@@ -103,7 +103,6 @@ public class Conductrics {
 			return this;
 		}
 
-		public String getDefault() { return defaultOption; }
 		public String getDefault(String agentCode) { return defaultOptions.get(agentCode); }
 		public RequestOptions setDefault(String agentCode, String optionCode) {
 			defaultOptions.put(agentCode, optionCode);
@@ -257,8 +256,8 @@ public class Conductrics {
 		this.Exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
 				callback.onValue( response == null
-					? new SelectResponse(agentCode, opts.getDefault(), "x")
-					: response.getSelection( agentCode ));
+					? new SelectResponse(agentCode, opts.getDefault(agentCode), "x")
+					: response.getSelection( agentCode, opts.getDefault(agentCode) ));
 			}
 		});
 	}
@@ -314,7 +313,7 @@ public class Conductrics {
 				return;
 			}
 		}
-		public SelectResponse getSelection(String agentCode) {
+		public SelectResponse getSelection(String agentCode, String defaultOption) {
 			if( sels == null || ! sels.containsKey(agentCode) ) {
 				return new SelectResponse(agentCode, defaultOption, "x");
 			}
