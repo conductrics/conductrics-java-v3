@@ -23,6 +23,7 @@ public class Test {
 		executor.execute(new ParamsWork());
 		executor.execute(new DefaultOptionForInvalidAgent());
 		executor.execute(new UserAgentWorks());
+		executor.execute(new InputsWork());
 	}
 
 	public static void _assertEqual(String a, String b) throws AssertionError {
@@ -178,6 +179,31 @@ public class Test {
 						_assertOneOf( outcome.getCode(), "A", "B" );
 						_assertEqual( outcome.getPolicy(), "random");
 						_assertInList( "Added trait 'ua/mo:n' (apply)", outcome.getExecResponse().getLog() );
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class InputsWork extends TestCase {
+		@Override public void run() {
+			started = true;
+			RequestOptions opts = new RequestOptions()
+				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+				.setParam("debug", "true")
+				.setInput("foo", "bar");
+			// the a-example agent has been (must be) configured to only return A or B, unless given foo=bar as an input
+			// then it will always select C
+			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						_assertEqual( outcome.getCode(), "C" );
+						_assertEqual( outcome.getPolicy(), "fixed"); // this is how we know it worked, because a "fixed" rule made the selection
 						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
