@@ -15,13 +15,14 @@ import java.util.concurrent.TimeUnit;
 public class Test {
 	public static void main(String[] args) {
 		// run all the tests in a thread pool
-		ThreadPoolExecutor executor = new ThreadPoolExecutor(0, 2, 100, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
+		ThreadPoolExecutor executor = new ThreadPoolExecutor(0, 10, 100, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<Runnable>());
 		// queue them all up, once the queue drains, the process will exit with code 0
-		// executor.execute(new TestCase());
-		// executor.execute(new SessionIsSticky());
-		// executor.execute(new TraitsWork());
-		// executor.execute(new ParamsWork());
+		executor.execute(new TestCase());
+		executor.execute(new SessionIsSticky());
+		executor.execute(new TraitsWork());
+		executor.execute(new ParamsWork());
 		executor.execute(new DefaultOptionForInvalidAgent());
+		executor.execute(new UserAgentWorks());
 	}
 
 	public static void _assertEqual(String a, String b) throws AssertionError {
@@ -35,6 +36,9 @@ public class Test {
 		// System.out.println("Assert "+a+" is one of: "+String.join(",", b));
 		for( String s: b ) if( a.equals(s) ) return;
 		assert false : a + " should be one of: " + String.join(",", b);
+	}
+	public static void _assertInList(String a, List<String> b) {
+		assert b.contains(a);
 	}
 
 	public static class TestCase implements Runnable {
@@ -78,16 +82,14 @@ public class Test {
 								try {
 									_assertEqual( secondOutcome.getCode(), firstOutcome.getCode() );
 									_assertEqual( secondOutcome.getPolicy(), "sticky" );
+									finish(null);
 								} catch( AssertionError err ) {
 									finish(err);
-									return;
 								}
-								finish(null);
 							}
 						});
 					} catch( AssertionError err ) {
 						finish(err);
-						return;
 					}
 				}
 			});
@@ -97,9 +99,8 @@ public class Test {
 	public static class TraitsWork extends TestCase {
 		@Override public void run() {
 			started = true;
-			String sessionId = "s-" + String.format("%f", Math.random()).replace('.','0');
 			RequestOptions opts = new RequestOptions()
-				.setSession(sessionId)
+				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setTraits("F:1", "F:2");
 			api.Select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
@@ -107,12 +108,12 @@ public class Test {
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertOneOf( outcome.getCode(), "A", "B" );
 						_assertEqual( outcome.getPolicy(), "random");
-						_assertEqual( String.join(",", outcome.getExecResponse().getTraits()), "cust/F:1,cust/F:2");
+						String returnedTraits = String.join(",", outcome.getExecResponse().getTraits());
+						_assertEqual( returnedTraits, "cust/F:1,cust/F:2");
+						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
-						return;
 					}
-					finish(null);
 				}
 			});
 		}
@@ -121,9 +122,8 @@ public class Test {
 	public static class ParamsWork extends TestCase {
 		@Override public void run() {
 			started = true;
-			String sessionId = "s-" + String.format("%f", Math.random()).replace('.','0');
 			RequestOptions opts = new RequestOptions()
-				.setSession(sessionId)
+				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setParam("debug", "true");
 			api.Select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
@@ -132,11 +132,10 @@ public class Test {
 						_assertOneOf( outcome.getCode(), "A", "B" );
 						_assertEqual( outcome.getPolicy(), "random");
 						assert outcome.getExecResponse().getLog().size() > 0 : "log should not be empty";
+						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
-						return;
 					}
-					finish(null);
 				}
 			});
 		}
@@ -146,7 +145,7 @@ public class Test {
 		@Override public void run() {
 			started = true;
 			RequestOptions opts = new RequestOptions()
-				.setSession("1234")
+				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setDefault("a-invalid", "B");
 			api.Select( opts, "a-invalid", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
@@ -155,13 +154,37 @@ public class Test {
 						_assertEqual( outcome.getAgent(), "a-invalid");
 						_assertEqual( outcome.getCode(), "B" );
 						_assertEqual( outcome.getPolicy(), "none");
+						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
-						return;
 					}
-					finish(null);
 				}
 			});
 		}
 	}
+
+	public static class UserAgentWorks extends TestCase {
+		@Override public void run() {
+			started = true;
+			RequestOptions opts = new RequestOptions()
+				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+				.setParam("debug", "true")
+				.setUserAgent("MAGIC STRING");
+			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						_assertOneOf( outcome.getCode(), "A", "B" );
+						_assertEqual( outcome.getPolicy(), "random");
+						_assertInList( "Added trait 'ua/mo:n' (apply)", outcome.getExecResponse().getLog() );
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
 }
