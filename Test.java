@@ -193,7 +193,6 @@ public class Test {
 			started = true;
 			RequestOptions opts = new RequestOptions()
 				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
-				.setParam("debug", "true")
 				.setInput("foo", "bar");
 			// the a-example agent has been (must be) configured to only return A or B, unless given foo=bar as an input
 			// then it will always select C
