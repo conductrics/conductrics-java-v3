@@ -75,6 +75,7 @@ public class Conductrics {
 			return this;
 		}
 
+		public HashMap<String, String> getInputs() { return input; }
 		public String getInput(String key) { return input.get(key); }
 		public RequestOptions setInput(String key, String val) {
 			input.put(key, val);
@@ -216,7 +217,13 @@ public class Conductrics {
 	}
 	private void exec( RequestOptions opts, JSONArray commands, Callback<JSONObject> callback) {
 		try {
-			String body = "{ \"commands\": " + commands.toString() + " }";
+			String body = "{ \"commands\": " + commands.toString();
+			JSONObject inputs = new JSONObject(opts.getInputs());
+			if( inputs.length() > 0 ) {
+				body += ", \"inputs\": " + inputs.toString();
+			}
+			body += " }";
+
 			HashMap<String, String> headers = new HashMap<String, String>();
 			headers.put("content-type", "application/json");
 			headers.put("content-length", String.format("%d", body.length()));
