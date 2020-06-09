@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.Iterator;
 
 import java.net.HttpURLConnection;
@@ -22,7 +23,6 @@ import java.io.DataOutputStream;
 import java.io.OutputStream;
 import java.io.InputStream;
 
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +41,7 @@ public class Conductrics {
 		o.close();
 	}
 	private static String readAll(InputStream s) {
+		if( s == null ) return "";
 		java.util.Scanner sc = new java.util.Scanner(s).useDelimiter("\\A");
 		return sc.hasNext() ? sc.next() : "";
 	}
@@ -210,14 +211,11 @@ public class Conductrics {
 	public void Exec( RequestOptions opts, JSONArray commands, Callback<ExecResponse> callback) {
 		exec(opts, commands, new Callback<JSONObject>() {
 			public void onValue(JSONObject data) {
-				callback.onValue( data == null
-					? null
-					: new ExecResponse( data ));
+				callback.onValue(new ExecResponse( data ));
 			}
 		});
 	}
 	private void exec( RequestOptions opts, JSONArray commands, Callback<JSONObject> callback) {
-		log("exec(" + commands.toString() + ")");
 		try {
 			String body = "{ \"commands\": " + commands.toString() + " }";
 			HashMap<String, String> headers = new HashMap<String, String>();
@@ -234,24 +232,21 @@ public class Conductrics {
 				callback.onValue( null );
 				return;
 			}
-			HTTP.request("POST", url, body, opts.getTimeout(), headers,
-				new Callback<String>() {
-					public void onValue(String responseBody) {
-						if( responseBody == null ) {
-							log("Response body is null");
-							callback.onValue( null );
-							return;
-						}
-						log("POST response: " + responseBody);
-						JSONObject result = new JSONObject(responseBody);
-						if( result.getInt("status") == 200 ) {
-							callback.onValue(result.getJSONObject("data"));
-						} else {
-							log("exec failed: " + responseBody);
-						}
+			HTTP.request("POST", url, body, opts.getTimeout(), headers, new Callback<String>() {
+				public void onValue(String responseBody) {
+					if( responseBody == null ) {
+						callback.onValue( null );
+						return;
+					}
+					log("POST response: " + responseBody);
+					JSONObject result = new JSONObject(responseBody);
+					if( result.getInt("status") == 200 ) {
+						callback.onValue(result.getJSONObject("data"));
+					} else {
+						log("exec failed: " + responseBody);
 					}
 				}
-			);
+			});
 		} catch (JSONException err ) {
 			log("JSONException in exec(): " + err.getLocalizedMessage());
 		}
@@ -284,27 +279,35 @@ public class Conductrics {
 		private HashMap<String, SelectResponse> sels;
 		private HashMap<String, GoalResponse> rewards;
 		private List<String> traits;
+		private List<String> log;
 		public ExecResponse(JSONObject response) {
 			sels = new HashMap<>();
 			rewards = new HashMap<>();
-			traits = new ArrayList<>();
+			traits = new LinkedList<>();
+			log = new LinkedList<String>();
 			if( response == null ) {
 				return;
 			}
 			try {
-				JSONArray items = response.getJSONArray("items");
-				for(int i = 0 ; i < items.length(); i++ ) {
-					JSONObject item = items.getJSONObject(i);
-					if( item.has("a") ) {
-						sels.put(item.getString("a"), new SelectResponse(item));
-					} else if( item.has( "g") ) {
-						rewards.put(item.getString("g"), new GoalResponse(item));
-					}
-				}
 				if( response.has("traits") ) {
 					JSONArray t = response.getJSONArray("traits");
 					for(int i = 0; i < t.length(); i++ ) {
 						traits.add(t.getString(i));
+					}
+				}
+				if( response.has("log") ) {
+					JSONArray l = response.getJSONArray("log");
+					for(int i = 0; i < l.length(); i++ ) {
+						this.log.add(l.getString(i));
+					}
+				}
+				JSONArray items = response.getJSONArray("items");
+				for(int i = 0 ; i < items.length(); i++ ) {
+					JSONObject item = items.getJSONObject(i);
+					if( item.has("a") ) {
+						sels.put(item.getString("a"), new SelectResponse(item, this));
+					} else if( item.has( "g") ) {
+						rewards.put(item.getString("g"), new GoalResponse(item));
 					}
 				}
 			} catch( JSONException err ) {
@@ -313,7 +316,7 @@ public class Conductrics {
 		}
 		public SelectResponse getSelection(String agentCode) {
 			if( sels == null || ! sels.containsKey(agentCode) ) {
-				return null;
+				return new SelectResponse(agentCode, defaultOption, "x");
 			}
 			return sels.get(agentCode);
 		}
@@ -326,20 +329,25 @@ public class Conductrics {
 		public List<String> getTraits() {
 			return traits;
 		}
+		public List<String> getLog() {
+			return log;
+		}
 	}
 	public static class SelectResponse {
 		private String a;
 		private String c;
 		private String p;
 		private HashMap<String, String> meta;
+		private ExecResponse execResponse;
 		SelectResponse(String A, String C, String P) {
 			meta = new HashMap<>();
 			a = A;
 			c = C;
 			p = P;
 		}
-		SelectResponse(JSONObject item) { // note: this is not the whole response,
+		SelectResponse(JSONObject item, ExecResponse source) { // note: this is not the whole response,
 			try {
+				execResponse = source;
 				c = item.getString("c");
 				a = item.getString("a");
 				p = item.getString("p");
@@ -350,6 +358,7 @@ public class Conductrics {
 					String key = keys.next();
 					meta.put(key, md.getString(key));
 				}
+
 			} catch( JSONException err ) {
 				return;
 			}
@@ -371,7 +380,10 @@ public class Conductrics {
 		}
 		public String getMeta(String key) { return meta.get(key); }
 		public String toString() {
-			return "{ agentCode: \""+a+"\", optionCode: \""+c+"\", policy: \""+p+"\" }";
+			return "{ \"agentCode\": \""+a+"\", \"optionCode\": \""+c+"\", \"policy\": \""+p+"\" }";
+		}
+		public ExecResponse getExecResponse() {
+			return execResponse;
 		}
 	}
 	public static class GoalResponse {
