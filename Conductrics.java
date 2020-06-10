@@ -10,7 +10,6 @@ import org.json.JSONException;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Iterator;
 
@@ -61,7 +60,6 @@ public class Conductrics {
 	public static class RequestOptions {
 		private HashMap<String, String> params = new HashMap<String, String>(); // Ultimately, a set of RequestOptions will become parameters to an HTTP request
 		private HashMap<String, String> input = new HashMap<String, String>();
-		private List<String> _traits = null; // Traits are a special set of parameters that we have to serialize differently
 		private int _timeout = 1000; // Timeout is just an internal option, and not sent with the params
 		private String defaultOption = "A"; // not currently settable
 		private HashMap<String, String> defaultOptions = new HashMap<String, String>();
@@ -320,6 +318,7 @@ public class Conductrics {
 		private HashMap<String, GoalResponse> rewards = new HashMap<>();
 		private List<String> traits = new LinkedList<>();
 		private List<String> log = new LinkedList<>();
+		private JSONObject json;
 		public ExecResponse(Exception err) {
 			setError( err );
 		}
@@ -327,6 +326,7 @@ public class Conductrics {
 			if( response == null ) {
 				return;
 			}
+			json = response;
 			try {
 				if( response.has("traits") ) {
 					JSONArray t = response.getJSONArray("traits");
@@ -372,11 +372,13 @@ public class Conductrics {
 		public List<String> getLog() {
 			return log;
 		}
+		public JSONObject getJSONObject() {
+			return json;
+		}
 
 		private Exception error;
 		public void setError(Exception err) { this.error = err; }
 		public Exception getError() { return error; }
-
 	}
 	public static class SelectResponse {
 		private String a;
