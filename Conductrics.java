@@ -18,6 +18,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
 import java.net.MalformedURLException;
+import java.net.SocketTimeoutException;
 import java.io.IOException;
 import java.io.DataOutputStream;
 import java.io.OutputStream;
@@ -31,6 +32,9 @@ public class Conductrics {
 
 	public static interface Callback<T> {
 		public void onValue(T value);
+	}
+	private static interface CallbackWithError<T> extends Callback<T> {
+		public void onError(Exception err);
 	}
 
 	private static void log(String line) { System.out.println("Conductrics: " + line); }
@@ -58,7 +62,7 @@ public class Conductrics {
 		private HashMap<String, String> params = new HashMap<String, String>(); // Ultimately, a set of RequestOptions will become parameters to an HTTP request
 		private HashMap<String, String> input = new HashMap<String, String>();
 		private List<String> _traits = null; // Traits are a special set of parameters that we have to serialize differently
-		private int _timeout = 0; // Timeout is just an internal option, and not sent with the params
+		private int _timeout = 1000; // Timeout is just an internal option, and not sent with the params
 		private String defaultOption = "A"; // not currently settable
 		private HashMap<String, String> defaultOptions = new HashMap<String, String>();
 		private HashMap<String, String> forceOptions = new HashMap<String, String>();
@@ -126,8 +130,8 @@ public class Conductrics {
 			private String body;
 			private int timeout;
 			private Map<String, String> headers;
-			private Callback<String> callback;
-			public RequestRunner(String method, String url, String body, int timeout, Map<String, String> headers, Callback<String> callback) {
+			private CallbackWithError<String> callback;
+			public RequestRunner(String method, String url, String body, int timeout, Map<String, String> headers, CallbackWithError<String> callback) {
 				this.method = method.toUpperCase();
 				this.url = url;
 				this.body = body;
@@ -143,7 +147,7 @@ public class Conductrics {
 				HttpURLConnection conn;
 				if( url == null ) {
 					log("HTTP RequestRunner url cannot be null, aborting request");
-					callback.onValue( null );
+					callback.onError( new Exception("invalid cannot be null") );
 					return;
 				}
 
@@ -154,7 +158,7 @@ public class Conductrics {
 					u = new URL(url);
 				} catch( MalformedURLException e ) {
 					log("MalformedURLException(url="+url+"): "+e.toString());
-					callback.onValue( null );
+					callback.onError( e );
 					return;
 				}
 
@@ -166,8 +170,8 @@ public class Conductrics {
 							conn.setRequestProperty(key, headers.get(key));
 						}
 					}
-					conn.setConnectTimeout(1000); // we shouldn't have to wait long just to get a socket
 					if( timeout > 0 ) {
+						conn.setConnectTimeout(timeout); // we shouldn't have to wait long just to get a socket
 						conn.setReadTimeout(timeout); // we may have to wait for the server response though, once connected
 					}
 					conn.setUseCaches( false );
@@ -177,45 +181,54 @@ public class Conductrics {
 					}
 				} catch( IOException e ) {
 					log("IOException("+method+" "+url+"): "+e.toString());
-					callback.onValue( null );
+					callback.onError( e );
 					return;
 				}
 
 				try {
 					if( body != null ) writeAll( body, conn.getOutputStream() );
+				} catch( SocketTimeoutException e ) {
+					log("SocketTimeoutException("+method+" "+url+"): "+e.toString());
+					callback.onError( e );
 				} catch( IOException e ) {
-					log("IOException("+method+" "+url+"): "+e.toString() + " " + readAll( conn.getErrorStream() ));
-					callback.onValue( null );
+					log("IOException("+method+" "+url+"): "+e.toString());
+					callback.onError( e );
 					return;
 				}
 
 				try {
 					callback.onValue( readAll( conn.getInputStream() ));
+				} catch( SocketTimeoutException e ) {
+					log("SocketTimeoutException("+method+" "+url+"): "+e.toString());
+					callback.onError( e );
 				} catch( IOException e ) {
-					log("IOException("+method+" "+url+"): "+e.toString() + readAll( conn.getErrorStream() ));
-					callback.onValue( null );
+					log("IOException("+method+" "+url+"): "+e.toString());
+					callback.onError( e );
 					return;
 				}
 			}
 		}
 
-		public static void request(String method, String url, String body, int timeout, Map<String, String> headers, Callback<String> callback) {
+		public static void request(String method, String url, String body, int timeout, Map<String, String> headers, CallbackWithError<String> callback) {
 			if( executor.isShutdown() || executor.isTerminated() || executor.isTerminating() ) {
-				callback.onValue( null );
+				callback.onError( new Exception("threadpool shutdown") );
 			} else {
-				executor.execute( new RequestRunner(method, url, body, timeout, headers, callback) );
+				executor.execute( new RequestRunner(method, url, body, timeout, headers, callback));
 			}
 		}
 	}
 
 	public void Exec( RequestOptions opts, JSONArray commands, Callback<ExecResponse> callback) {
-		exec(opts, commands, new Callback<JSONObject>() {
+		exec(opts, commands, new CallbackWithError<JSONObject>() {
 			public void onValue(JSONObject data) {
 				callback.onValue(new ExecResponse( data ));
 			}
+			public void onError(Exception err) {
+				callback.onValue(new ExecResponse(err));
+			}
 		});
 	}
-	private void exec( RequestOptions opts, JSONArray commands, Callback<JSONObject> callback) {
+	private void exec( RequestOptions opts, JSONArray commands, CallbackWithError<JSONObject> callback) {
 		try {
 			String body = "{ \"commands\": " + commands.toString();
 			JSONObject inputs = new JSONObject(opts.getInputs());
@@ -235,22 +248,30 @@ public class Conductrics {
 				}
 			} catch( java.io.UnsupportedEncodingException e) {
 				log("Failed to produce a valid API url: " + e.getLocalizedMessage());
-				callback.onValue( null );
+				callback.onError( e );
 				return;
 			}
-			HTTP.request("POST", url, body, opts.getTimeout(), headers, new Callback<String>() {
+			HTTP.request("POST", url, body, opts.getTimeout(), headers, new CallbackWithError<String>() {
 				public void onValue(String responseBody) {
 					if( responseBody == null ) {
-						callback.onValue( null );
+						callback.onError( new Exception("response body is null") );
 						return;
 					}
 					log("POST response: " + responseBody);
 					JSONObject result = new JSONObject(responseBody);
 					if( result.getInt("status") == 200 ) {
-						callback.onValue(result.getJSONObject("data"));
+						JSONObject data = result.getJSONObject("data");
+						if( data != null ) {
+							callback.onValue(data);
+						} else {
+							callback.onError( new Exception("no 'data' key in JSON response") );
+						}
 					} else {
-						log("exec failed: " + responseBody);
+						callback.onError( new Exception("bad 'status' value in JSON response: " + responseBody));
 					}
+				}
+				public void onError(Exception err) {
+					callback.onError(err);
 				}
 			});
 		} catch (JSONException err ) {
@@ -261,15 +282,19 @@ public class Conductrics {
 	public void Select(RequestOptions opts, String agentCode, Callback<SelectResponse> callback) {
 		String forced = opts.getForcedOutcome(agentCode);
 		if( forced != null ) {
-			callback.onValue( new SelectResponse(agentCode, forced, "x") );
+			callback.onValue( new SelectResponse(agentCode, forced, "x", new Exception("forced")) );
 			return;
 		}
 		JSONArray commands = new JSONArray().put(new JSONObject().put("a", agentCode));
 		this.Exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
-				callback.onValue( response == null
-					? new SelectResponse(agentCode, opts.getDefault(agentCode), "x")
-					: response.getSelection( agentCode, opts.getDefault(agentCode) ));
+				if( response == null ) {
+					callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("null response")) );
+				} else if( response.getError() != null ) {
+					callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", response.getError()));
+				} else {
+					callback.onValue( response.getSelection( agentCode, opts.getDefault(agentCode) ));
+				}
 			}
 		});
 	}
@@ -279,23 +304,26 @@ public class Conductrics {
 		JSONArray commands = new JSONArray().put(new JSONObject().put("g", goalCode).put("v", value));
 		this.Exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
-				callback.onValue( response == null
-					? new GoalResponse(goalCode)
-					: response.getReward( goalCode ));
+				if( response == null ) {
+					callback.onValue( new GoalResponse(goalCode, new Exception("response is null")) );
+				} else if( response.getError() != null ) {
+					callback.onValue( new GoalResponse(goalCode, response.getError()) );
+				} else {
+					callback.onValue( response.getReward( goalCode ));
+				}
 			}
 		});
 	}
 
 	public static class ExecResponse {
-		private HashMap<String, SelectResponse> sels;
-		private HashMap<String, GoalResponse> rewards;
-		private List<String> traits;
-		private List<String> log;
+		private HashMap<String, SelectResponse> sels = new HashMap<>();
+		private HashMap<String, GoalResponse> rewards = new HashMap<>();
+		private List<String> traits = new LinkedList<>();
+		private List<String> log = new LinkedList<>();
+		public ExecResponse(Exception err) {
+			setError( err );
+		}
 		public ExecResponse(JSONObject response) {
-			sels = new HashMap<>();
-			rewards = new HashMap<>();
-			traits = new LinkedList<>();
-			log = new LinkedList<String>();
 			if( response == null ) {
 				return;
 			}
@@ -322,18 +350,19 @@ public class Conductrics {
 					}
 				}
 			} catch( JSONException err ) {
+				setError( err );
 				return;
 			}
 		}
 		public SelectResponse getSelection(String agentCode, String defaultOption) {
 			if( sels == null || ! sels.containsKey(agentCode) ) {
-				return new SelectResponse(agentCode, defaultOption, "x");
+				return new SelectResponse(agentCode, defaultOption, "x", new Exception("unknown agent"));
 			}
 			return sels.get(agentCode);
 		}
 		public GoalResponse getReward(String goalCode) {
 			if( rewards == null || ! rewards.containsKey(goalCode) ) {
-				return null;
+				return new GoalResponse(goalCode); // will have .acceptedValue(agentCode) == 0 for all agents
 			}
 			return rewards.get(goalCode);
 		}
@@ -343,6 +372,11 @@ public class Conductrics {
 		public List<String> getLog() {
 			return log;
 		}
+
+		private Exception error;
+		public void setError(Exception err) { this.error = err; }
+		public Exception getError() { return error; }
+
 	}
 	public static class SelectResponse {
 		private String a;
@@ -356,11 +390,16 @@ public class Conductrics {
 			c = C;
 			p = P;
 		}
+		SelectResponse(String A, String C, String P, Exception err) {
+			meta = new HashMap<>();
+			a = A; c = C; p = P;
+			setError(err);
+		}
 		SelectResponse(JSONObject item, ExecResponse source) { // note: this is not the whole response,
 			try {
 				execResponse = source;
-				c = item.getString("c");
 				a = item.getString("a");
+				c = item.getString("c");
 				p = item.getString("p");
 				meta = new HashMap<>();
 				JSONObject md = item.getJSONObject("md");
@@ -369,9 +408,11 @@ public class Conductrics {
 					String key = keys.next();
 					meta.put(key, md.getString(key));
 				}
-
-			} catch( JSONException err ) {
 				return;
+			} catch( JSONException err ) {
+				setError(new Exception(err.getLocalizedMessage()));
+			} catch( Exception err ) {
+				setError( err );
 			}
 		}
 		public String getAgent() { return a; }
@@ -390,16 +431,21 @@ public class Conductrics {
 			}
 		}
 		public String getMeta(String key) { return meta.get(key); }
-		public String toString() {
-			return "{ \"agentCode\": \""+a+"\", \"optionCode\": \""+c+"\", \"policy\": \""+p+"\" }";
-		}
-		public ExecResponse getExecResponse() {
-			return execResponse;
-		}
+		public String toString() { return "{ \"agentCode\": \""+a+"\", \"optionCode\": \""+c+"\", \"policy\": \""+p+"\" }"; }
+		public ExecResponse getExecResponse() { return execResponse; }
+
+		private Exception error;
+		public void setError(Exception err) { this.error = err; }
+		public Exception getError() { return error; }
 	}
+
 	public static class GoalResponse {
 		private String g;
 		private HashMap<String, Double> rs = new HashMap<String, Double>();
+		GoalResponse(String goalCode, Exception err) {
+			g = goalCode;
+			error = err;
+		}
 		GoalResponse(String goalCode) {
 			g = goalCode;
 		}
@@ -412,7 +458,9 @@ public class Conductrics {
 					rs.put(o.getString("a"), o.getDouble("v"));
 				}
 			} catch( JSONException err ) {
-				return;
+				setError(new Exception(err.getLocalizedMessage()));
+			} catch( Exception err ) {
+				setError( err );
 			}
 		}
 		public String toString() {
@@ -431,5 +479,9 @@ public class Conductrics {
 			}
 			return rs.get(agentCode);
 		}
+
+		private Exception error;
+		public void setError(Exception err) { this.error = err; }
+		public Exception getError() { return error; }
 	}
 }
