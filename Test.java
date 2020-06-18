@@ -9,6 +9,7 @@ import com.conductrics.Conductrics.GoalResponse;
 import com.conductrics.Conductrics.RequestOptions;
 import com.conductrics.Conductrics.Callback;
 import com.conductrics.Conductrics.Policy;
+import com.conductrics.Conductrics.Status;
 
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -29,6 +30,7 @@ public class Test {
 		executor.execute(new ForceOutcomeTest());
 		executor.execute(new TimeoutTest());
 		executor.execute(new SelectMultipleTest());
+		executor.execute(new ProvisionalTest());
 	}
 
 	public static void _assertEqual(String a, String b) throws AssertionError {
@@ -39,6 +41,7 @@ public class Test {
 		assert a.equals(b) : "'" + a + "' should equal '" + b + "'";
 	}
 	public static void _assertOneOf(String a, String... b) {
+		assert a != null;
 		for( String s: b ) if( (a == null && s == null) || a.equals(s) ) return;
 		assert false : a + " should be one of: " + String.join(",", b);
 	}
@@ -276,6 +279,38 @@ public class Test {
 						_assertEqual( outcome.getAgent(), "a-example");
 						assert outcome.getPolicy() == Policy.Sticky: "getPolicy() should be none";
 						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class ProvisionalTest extends TestCase {
+		@Override public void run() {
+			started = true;
+			RequestOptions opts = new RequestOptions(null)
+				.setProvisional(true);
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						assert outcome.getStatus() == Status.Provisional : "getStatus() should be Provisional";
+						opts.setConfirm(true);
+						api.select(opts, "a-example", new Callback<SelectResponse>() {
+							public void onValue(SelectResponse outcome2) {
+								try {
+									assert outcome2 != null : "Outcome cannot be null";
+									_assertEqual( outcome2.getAgent(), "a-example");
+									assert outcome2.getStatus() == Status.Confirmed: "getStatus() should be Provisional";
+									finish(null);
+								} catch( AssertionError err ) {
+									finish(err);
+								}
+							}
+						});
 					} catch( AssertionError err ) {
 						finish(err);
 					}
