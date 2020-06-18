@@ -83,6 +83,7 @@ public class Conductrics {
 		private HashMap<String, String> defaultOptions = new HashMap<String, String>();
 		private HashMap<String, String> forceOptions = new HashMap<String, String>();
 		private boolean provisional = false;
+		private boolean shouldConfirm = false;
 
 		/** Construct a new RequestOptions, and set the session identifier at the same time. */
 		public RequestOptions(String sessionId) {
@@ -96,10 +97,21 @@ public class Conductrics {
 		/** Return the current provisional status of these requests. */
 		public boolean getProvisional() { return provisional; }
 		/** Set the current provisional status of these requests.
-		 * Requests made with provisional status enabled must later be confirmed.
+		 * Requests made with provisional status enabled must later be confirmed, using setConfirm(true).
 		 */
-		public void setProvisional(boolean value) {
+		public RequestOptions setProvisional(boolean value) {
 			provisional = value;
+			if( value ) shouldConfirm = false;
+			return this;
+		}
+
+		/** Return whether this request will confirm a prior provisional selection. */
+		public boolean getConfirm() { return shouldConfirm; }
+		/** Set whether this request will confirm a prior provisional selection. */
+		public RequestOptions setConfirm(boolean value) {
+			shouldConfirm = value;
+			if( value ) provisional = false;
+			return this;
 		}
 
 		/** Return the session identifier for this request. */
@@ -362,7 +374,14 @@ public class Conductrics {
 			callback.onValue( new SelectResponse(agentCode, forced, "x", new Exception("forced")) );
 			return;
 		}
-		JSONArray commands = new JSONArray().put(new JSONObject().put("a", agentCode));
+		JSONArray commands = new JSONArray();
+		JSONObject command = new JSONObject().put("a", agentCode);
+		if( opts.getProvisional() ) {
+			command.put("s", "p");
+		} else if( opts.getConfirm() ) {
+			command.put("s", "ok");
+		}
+		commands.put(command);
 		this.exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
 				if( response == null ) {
@@ -527,11 +546,17 @@ public class Conductrics {
 		Bot,
 		Unknown
 	}
+	public static enum Status {
+		Confirmed,
+		Provisional,
+		Unknown
+	}
 	/** Describes the result of a selection. */
 	public static class SelectResponse {
 		private String a;
 		private String c;
 		private String p;
+		private Status s = Status.Unknown;
 		private HashMap<String, String> meta;
 		private ExecResponse execResponse;
 		SelectResponse(String A, String C, String P) {
@@ -557,6 +582,11 @@ public class Conductrics {
 				while(keys.hasNext()) {
 					String key = keys.next();
 					meta.put(key, md.getString(key));
+				}
+				switch( item.getString("s") ) {
+					case "ok": s = Status.Confirmed; break;
+					case "p": s = Status.Provisional; break;
+					default: s = Status.Unknown; break;
 				}
 				return;
 			} catch( JSONException err ) {
@@ -587,6 +617,9 @@ public class Conductrics {
 		 * Meta data is configured in the Console.
 		 */
 		public String getMeta(String key) { return meta.get(key); }
+
+		/** Return the status of the request. */
+		public Status getStatus() { return s; }
 
 		/** Return a JSON-compatible description of this selection (without meta-data). */
 		public String toString() { return "{ \"agentCode\": \""+a+"\", \"optionCode\": \""+c+"\", \"policy\": \""+p+"\" }"; }
@@ -648,4 +681,5 @@ public class Conductrics {
 		public void setError(Exception err) { this.error = err; }
 		public Exception getError() { return error; }
 	}
+
 }
