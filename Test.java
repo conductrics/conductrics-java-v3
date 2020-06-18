@@ -1,12 +1,14 @@
 package com.conductrics;
 
 import java.util.List;
+import java.util.Map;
 import java.util.LinkedList;
 
 import com.conductrics.Conductrics.SelectResponse;
 import com.conductrics.Conductrics.GoalResponse;
 import com.conductrics.Conductrics.RequestOptions;
 import com.conductrics.Conductrics.Callback;
+import com.conductrics.Conductrics.Policy;
 
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -26,6 +28,7 @@ public class Test {
 		executor.execute(new InputsTest());
 		executor.execute(new ForceOutcomeTest());
 		executor.execute(new TimeoutTest());
+		executor.execute(new SelectMultipleTest());
 	}
 
 	public static void _assertEqual(String a, String b) throws AssertionError {
@@ -36,8 +39,7 @@ public class Test {
 		assert a.equals(b) : "'" + a + "' should equal '" + b + "'";
 	}
 	public static void _assertOneOf(String a, String... b) {
-		// System.out.println("Assert "+a+" is one of: "+String.join(",", b));
-		for( String s: b ) if( a.equals(s) ) return;
+		for( String s: b ) if( (a == null && s == null) || a.equals(s) ) return;
 		assert false : a + " should be one of: " + String.join(",", b);
 	}
 	public static void _assertInList(String a, List<String> b) {
@@ -74,20 +76,19 @@ public class Test {
 		@Override public void run() {
 			started = true;
 			String sessionId = "s-" + String.format("%f", Math.random()).replace('.','0');
-			RequestOptions opts = new RequestOptions()
-				.setSession(sessionId);
-			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+			RequestOptions opts = new RequestOptions(sessionId);
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse firstOutcome) {
 					try {
 						_assertEqual( firstOutcome.getAgent(), "a-example");
 						_assertOneOf( firstOutcome.getCode(), "A", "B" );
-						_assertEqual( firstOutcome.getPolicy(), "random");
+						assert firstOutcome.getPolicy() == Policy.Random : "getPolicy() should be random";
 						assert firstOutcome.getError() == null : "getError() should be null";
-						api.Select( opts, "a-example", new Callback<SelectResponse>() {
+						api.select( opts, "a-example", new Callback<SelectResponse>() {
 							public void onValue(SelectResponse secondOutcome) {
 								try {
 									_assertEqual( secondOutcome.getCode(), firstOutcome.getCode() );
-									_assertEqual( secondOutcome.getPolicy(), "sticky" );
+									assert secondOutcome.getPolicy() == Policy.Sticky : "getPolicy() should be sticky";
 									assert secondOutcome.getError() == null : "getError() should be null";
 									finish(null);
 								} catch( AssertionError err ) {
@@ -106,15 +107,14 @@ public class Test {
 	public static class TraitsTest extends TestCase {
 		@Override public void run() {
 			started = true;
-			RequestOptions opts = new RequestOptions()
-				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setTraits("F:1", "F:2");
-			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertOneOf( outcome.getCode(), "A", "B" );
-						_assertEqual( outcome.getPolicy(), "random");
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be random";
 						String returnedTraits = String.join(",", outcome.getExecResponse().getTraits());
 						_assertEqual( returnedTraits, "cust/F:1,cust/F:2");
 						finish(null);
@@ -129,15 +129,14 @@ public class Test {
 	public static class ParamsTest extends TestCase {
 		@Override public void run() {
 			started = true;
-			RequestOptions opts = new RequestOptions()
-				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setParam("debug", "true");
-			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertOneOf( outcome.getCode(), "A", "B" );
-						_assertEqual( outcome.getPolicy(), "random");
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be random";
 						assert outcome.getExecResponse().getLog().size() > 0 : "log should not be empty";
 						finish(null);
 					} catch( AssertionError err ) {
@@ -151,16 +150,15 @@ public class Test {
 	public static class DefaultOptionForInvalidAgent extends TestCase {
 		@Override public void run() {
 			started = true;
-			RequestOptions opts = new RequestOptions()
-				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setDefault("a-invalid", "B");
-			api.Select( opts, "a-invalid", new Callback<SelectResponse>() {
+			api.select( opts, "a-invalid", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
 						assert outcome != null : "Outcome cannot be null";
 						_assertEqual( outcome.getAgent(), "a-invalid");
 						_assertEqual( outcome.getCode(), "B" );
-						_assertEqual( outcome.getPolicy(), "none");
+						assert outcome.getPolicy() == Policy.None: "getPolicy() should be none";
 						_assertEqual( outcome.getError().getMessage(), "unknown agent" );
 						finish(null);
 					} catch( AssertionError err ) {
@@ -174,17 +172,16 @@ public class Test {
 	public static class UserAgentTest extends TestCase {
 		@Override public void run() {
 			started = true;
-			RequestOptions opts = new RequestOptions()
-				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setParam("debug", "true")
 				.setUserAgent("MAGIC STRING");
-			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
 						assert outcome != null : "Outcome cannot be null";
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertOneOf( outcome.getCode(), "A", "B" );
-						_assertEqual( outcome.getPolicy(), "random");
+						assert outcome.getPolicy() == Policy.Random: "getPolicy() should be random";
 						_assertInList( "Added trait 'ua/mo:n' (apply)", outcome.getExecResponse().getLog() );
 						finish(null);
 					} catch( AssertionError err ) {
@@ -198,18 +195,17 @@ public class Test {
 	public static class InputsTest extends TestCase {
 		@Override public void run() {
 			started = true;
-			RequestOptions opts = new RequestOptions()
-				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setInput("foo", "bar");
 			// the a-example agent has been (must be) configured to only return A or B, unless given foo=bar as an input
 			// then it will always select C
-			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
 						assert outcome != null : "Outcome cannot be null";
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertEqual( outcome.getCode(), "C" );
-						_assertEqual( outcome.getPolicy(), "fixed"); // this is how we know it worked, because a "fixed" rule made the selection
+						assert outcome.getPolicy() == Policy.Fixed: "getPolicy() should be fixed";
 						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
@@ -222,16 +218,15 @@ public class Test {
 	public static class ForceOutcomeTest extends TestCase {
 		@Override public void run() {
 			started = true;
-			RequestOptions opts = new RequestOptions()
-				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.forceOutcome( "a-example", "D"); // can specify a (normally) impossible outcome
-			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
 						assert outcome != null : "Outcome cannot be null";
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertEqual( outcome.getCode(), "D" );
-						_assertEqual( outcome.getPolicy(), "none");
+						assert outcome.getPolicy() == Policy.None: "getPolicy() should be none";
 						_assertEqual( outcome.getError().getMessage(), "forced" );
 						finish(null);
 					} catch( AssertionError err ) {
@@ -245,18 +240,41 @@ public class Test {
 	public static class TimeoutTest extends TestCase {
 		@Override public void run() {
 			started = true;
-			RequestOptions opts = new RequestOptions()
-				.setSession("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
 				.setTimeout(1) // after 1 ms, basically instantly
 				.setDefault("a-example", "E");
-			api.Select( opts, "a-example", new Callback<SelectResponse>() {
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
 						assert outcome != null : "Outcome cannot be null";
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertEqual( outcome.getCode(), "E" );
-						_assertEqual( outcome.getPolicy(), "none");
+						assert outcome.getPolicy() == Policy.None: "getPolicy() should be none";
 						_assertEqual( outcome.getError().getMessage(), "Read timed out" );
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class SelectMultipleTest extends TestCase {
+		@Override public void run() {
+			started = true;
+			List<String> agents = new LinkedList<String>();
+			agents.add("a-example");
+			agents.add("a-example");
+			RequestOptions opts = new RequestOptions(null)
+				.forceOutcome("a-example", "A");
+			api.select( opts, agents, new Callback<Map<String,SelectResponse>>() {
+				public void onValue(Map<String,SelectResponse> outcomes) {
+					try {
+						SelectResponse outcome = outcomes.get("a-example");
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						assert outcome.getPolicy() == Policy.Sticky: "getPolicy() should be none";
 						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);

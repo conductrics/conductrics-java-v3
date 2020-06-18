@@ -27,16 +27,29 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+/* TODO:
+ * 3. Reward should not require the callback
+ * 4. Support MVT by adding select(List<String> agents)
+ */
+
 public class Conductrics {
 
+	/** A Callback<T> is used to handle an asynchronous result of type T.
+	 */
 	public static interface Callback<T> {
 		public void onValue(T value);
 	}
+	/** CallbackWithError<T> is used internally, to propagate possible errors as well as values.
+	 * Errors encountered this way are attached to result objects, eg SelectResponse, as getError()
+	 */
 	private static interface CallbackWithError<T> extends Callback<T> {
 		public void onError(Exception err);
 	}
 
-	private static void log(String line) { System.out.println("Conductrics: " + line); }
+	private static void log(String line) {
+		System.out.print("Conductrics: ");
+		System.out.println(line);
+	}
 	private static void writeAll(String data, OutputStream out) throws IOException {
 		DataOutputStream o = new DataOutputStream( out );
 		o.writeBytes( data );
@@ -52,72 +65,137 @@ public class Conductrics {
 	private String apiUrl;
 	private String apiKey;
 
+	/** Construct an API instance using an API URL and an API Key
+	 * @param apiUrl an absolute URL, taken from the Conductrics Console > Developers > API Keys section.
+	 * @param apiKey a Conductrics API Key, from the Console.
+	 */
 	public Conductrics(String apiUrl, String apiKey) {
 		this.apiUrl = apiUrl;
 		this.apiKey = apiKey;
 	}
 
+	/** RequestOptions contains the configuration to be used when calling select(), reward(), or exec(). */
 	public static class RequestOptions {
 		private HashMap<String, String> params = new HashMap<String, String>(); // Ultimately, a set of RequestOptions will become parameters to an HTTP request
 		private HashMap<String, String> input = new HashMap<String, String>();
-		private int _timeout = 1000; // Timeout is just an internal option, and not sent with the params
+		private int _timeout = 2000; // Timeout is just an internal option, and not sent with the params
 		private String defaultOption = "A"; // not currently settable
 		private HashMap<String, String> defaultOptions = new HashMap<String, String>();
 		private HashMap<String, String> forceOptions = new HashMap<String, String>();
+		private boolean provisional = false;
 
+		/** Construct a new RequestOptions, and set the session identifier at the same time. */
+		public RequestOptions(String sessionId) {
+			if( sessionId == null || sessionId.length() == 0 ) {
+				// Start with a default random session id
+				sessionId = "s-" + String.format("%f", Math.random()).replace('.','0');
+			}
+			params.put("session", sessionId);
+		}
+
+		/** Return the current provisional status of these requests. */
+		public boolean getProvisional() { return provisional; }
+		/** Set the current provisional status of these requests.
+		 * Requests made with provisional status enabled must later be confirmed.
+		 */
+		public void setProvisional(boolean value) {
+			provisional = value;
+		}
+
+		/** Return the session identifier for this request. */
 		public String getSession() { return params.get("session"); }
+		/** Set the session identifier String that will be used for this request. */
 		public RequestOptions setSession(String s) {
 			params.put("session", s);
 			return this;
 		}
 
+		/** Return the value to send as the 'User-Agent' of the client. */
 		public String getUserAgent() { return params.get("ua"); }
+		/** Set the 'User-Agent' of the client. */
 		public RequestOptions setUserAgent(String s) {
 			params.put("ua", s);
 			return this;
 		}
 
+		/** Return the set of all "input" values that will be sent with the request.
+		 * These "inputs" are used in rules in the Conductrics Console.  */
 		public HashMap<String, String> getInputs() { return input; }
+		/** Returns one "input" value to be sent with the request.  */
 		public String getInput(String key) { return input.get(key); }
+		/** Set one "input" value, to be sent along with the request.
+		 * These "input" values can be used in Targeting rules, on the Agent screen, of the Console.
+		 */
 		public RequestOptions setInput(String key, String val) {
 			input.put(key, val);
 			return this;
 		}
 
+		/** Return an array of all traits that will be applied to this request. */
 		public String[] getTraits() { return params.get("traits").split(","); }
+		/** Use a List to set all the traits for this request. */
 		public RequestOptions setTraits(List<String> v) {
 			params.put("traits", String.join(",", v));
 			return this;
 		}
+		/** Use variadic arguments to set all the traits for this request. */
 		public RequestOptions setTraits(String ... v) {
 			params.put("traits", String.join(",", v));
 			return this;
 		}
 
+		/** Return (a copy of) all the URL parameters to be sent with the request.
+		 * Included will be values like "traits", "ua", and "session", which are set elsewhere in RequestOptions.
+		 */
 		public Map<String, String> getParams() { return new HashMap<String, String>(params); }
+		/** Set one custom URL parameter to be sent.
+		 * A useful example: setParam("debug", "true"), will cause a resulting ExecResponse.getLog() to be full of messages.
+		 * @param key The name of the URL parameter
+		 * @param value Any string value, the resulting "&key=value" will be appended to the request.
+		 */
 		public RequestOptions setParam(String key, String value) {
 			params.put(key, value);
 			return this;
 		}
 
+		/** Return the current timeout, in milliseconds. */
 		public int getTimeout() { return _timeout; }
+		/** Set the current timeout, in milliseconds. */
 		public RequestOptions setTimeout(int ms) {
 			_timeout = ms;
 			return this;
 		}
 
+		/** Return the current default optionCode.
+		 * This value will be used for a SelectResponse.getCode() if any errors occur.
+		 * Default value is "A", if setDefault() has not called.
+		 */
 		public String getDefault(String agentCode) { return defaultOptions.get(agentCode); }
+		/** Set the default optionCode.
+		 * This value will be used for a SelectResponse.getCode() if any errors occur.
+		 * @param agentCode The code of the agent to apply the default to.
+		 * @param optionCode The code of the option to use if there is an error, eg "B".
+		 */
 		public RequestOptions setDefault(String agentCode, String optionCode) {
 			defaultOptions.put(agentCode, optionCode);
 			return this;
 		}
 
+		/** Return the current "forced outcome".
+		 * If a "forced outcome" is set for an agent, all calls to Select() for that agent, 
+		 * with these options, will skip the API request.
+		 */
 		public String getForcedOutcome(String agentCode) { return forceOptions.get(agentCode); }
+		/** Set a "forced outcome" for a particular agent.
+		 * Calls to api.Select() that use this RequestOptions will not make a real API request,
+		 * but will instead return a SelectResponse with getCode() == the optionCode given here.
+		 */
 		public RequestOptions forceOutcome(String agentCode, String optionCode) {
 			forceOptions.put(agentCode, optionCode);
 			return this;
 		}
 	}
+
 	private static class HTTP {
 		// use a small thread-pool to handle all our HTTP Requests asynchronously
 		private static ThreadPoolExecutor executor = new ThreadPoolExecutor(0, 10, 1, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
@@ -216,17 +294,13 @@ public class Conductrics {
 		}
 	}
 
-	public void Exec( RequestOptions opts, JSONArray commands, Callback<ExecResponse> callback) {
-		exec(opts, commands, new CallbackWithError<JSONObject>() {
-			public void onValue(JSONObject data) {
-				callback.onValue(new ExecResponse( data ));
-			}
-			public void onError(Exception err) {
-				callback.onValue(new ExecResponse(err));
-			}
-		});
-	}
-	private void exec( RequestOptions opts, JSONArray commands, CallbackWithError<JSONObject> callback) {
+	/** Executes any arbitrary API commands, any commands documented in the Runtime API Reference are supported.
+	 * The result is given to callback.onValue(), provided by the caller.
+	 * @param opts A RequestOptions object that contains the configuration for this request.
+	 * @param commands A JSONArray, structrued according to the Runtime API Reference.
+	 * @param callback A Callback that will be given an ExecResponse; callback.onValue(ExecResponse)
+	 */
+	public void exec( RequestOptions opts, JSONArray commands, Callback<ExecResponse> callback) {
 		try {
 			String body = "{ \"commands\": " + commands.toString();
 			JSONObject inputs = new JSONObject(opts.getInputs());
@@ -246,13 +320,13 @@ public class Conductrics {
 				}
 			} catch( java.io.UnsupportedEncodingException e) {
 				log("Failed to produce a valid API url: " + e.getLocalizedMessage());
-				callback.onError( e );
+				callback.onValue( new ExecResponse( e ));
 				return;
 			}
 			HTTP.request("POST", url, body, opts.getTimeout(), headers, new CallbackWithError<String>() {
 				public void onValue(String responseBody) {
 					if( responseBody == null ) {
-						callback.onError( new Exception("response body is null") );
+						callback.onValue(new ExecResponse(new Exception("response body is null")));
 						return;
 					}
 					log("POST response: " + responseBody);
@@ -260,16 +334,16 @@ public class Conductrics {
 					if( result.getInt("status") == 200 ) {
 						JSONObject data = result.getJSONObject("data");
 						if( data != null ) {
-							callback.onValue(data);
+							callback.onValue(new ExecResponse(data));
 						} else {
-							callback.onError( new Exception("no 'data' key in JSON response") );
+							callback.onValue(new ExecResponse(new Exception("no 'data' key in JSON response")));
 						}
 					} else {
-						callback.onError( new Exception("bad 'status' value in JSON response: " + responseBody));
+						callback.onValue(new ExecResponse(new Exception("bad 'status' value in JSON response: " + responseBody)));
 					}
 				}
 				public void onError(Exception err) {
-					callback.onError(err);
+					callback.onValue(new ExecResponse(err));
 				}
 			});
 		} catch (JSONException err ) {
@@ -277,14 +351,19 @@ public class Conductrics {
 		}
 	}
 
-	public void Select(RequestOptions opts, String agentCode, Callback<SelectResponse> callback) {
+	/** Request a selection from a specified agent.
+	 * @param opts A RequestOptions object that contains the configuration for this request.
+	 * @param agentCode A String that specifies which agent to use.
+	 * @param callback A Callback that will be given a SelectResponse; callback.onValue(SelectResponse)
+	 */
+	public void select(RequestOptions opts, String agentCode, Callback<SelectResponse> callback) {
 		String forced = opts.getForcedOutcome(agentCode);
 		if( forced != null ) {
 			callback.onValue( new SelectResponse(agentCode, forced, "x", new Exception("forced")) );
 			return;
 		}
 		JSONArray commands = new JSONArray().put(new JSONObject().put("a", agentCode));
-		this.Exec( opts, commands, new Callback<ExecResponse>() {
+		this.exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
 				if( response == null ) {
 					callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("null response")) );
@@ -297,10 +376,57 @@ public class Conductrics {
 		});
 	}
 
-	public void Reward(RequestOptions opts, String goalCode, Callback<GoalResponse> callback) { Reward( opts, goalCode, 1.0, callback ); }
-	public void Reward(RequestOptions opts, String goalCode, Double value, Callback<GoalResponse> callback) {
+	/** Request multiple selections at the same time. Can be used to interact with an MVT agent.
+	 * @param opts A RequestOptions object that contains the configuration for this request.
+	 * @param agentCodes A list of agent codes.
+	 * @param callback A Callback that will be given a list of SelectResponse objects.
+	 */
+	public void select(RequestOptions opts, List<String> agentCodes, Callback<Map<String, SelectResponse>> callback) {
+		Map<String, SelectResponse> result = new HashMap<>();
+		JSONArray commands = new JSONArray();
+		for( String agent : agentCodes ) {
+			commands.put(new JSONObject().put("a", agent));
+		}
+		this.exec( opts, commands, new Callback<ExecResponse>() {
+			public void onValue(ExecResponse response) {
+				for( String agent : agentCodes ) {
+					result.put(agent, response.getSelection(agent, opts.getDefault(agent)));
+				}
+				callback.onValue( result );
+			}
+		});
+	}
+
+	private Callback<GoalResponse> emptyCallback = new Callback<GoalResponse>() {
+		public void onValue(GoalResponse response) { }
+	};
+
+	/** Notify Conductrics that some Reward value should be registered.
+	 * @param opts A RequestOptions object that contains the configuration for this request.
+	 * @param goalCode A String that specifies which goal should get the value.
+	 * @param callback A Callback that will be given a GoalResponse; callback.onValue(GoalResponse)
+	 */
+	public void reward(RequestOptions opts, String goalCode, Callback<GoalResponse> callback) { reward( opts, goalCode, 1.0, callback ); }
+	/** Notify Conductrics that some Reward value should be registered.
+	 * @param opts A RequestOptions object that contains the configuration for this request.
+	 * @param goalCode A String that specifies which goal should get the value.
+	 */
+	public void reward(RequestOptions opts, String goalCode) { reward( opts, goalCode, 1.0, emptyCallback ); }
+	/** Notify Conductrics that some Reward value should be registered.
+	 * @param opts A RequestOptions object that contains the configuration for this request.
+	 * @param goalCode A String that specifies which goal should get the value.
+	 * @param value A Double that indicate how much value to register for the goal; if not given, defaults to 1.0
+	 */
+	public void reward(RequestOptions opts, String goalCode, Double value) { reward( opts, goalCode, value, emptyCallback ); }
+	/** Notify Conductrics that some Reward value should be registered.
+	 * @param opts A RequestOptions object that contains the configuration for this request.
+	 * @param goalCode A String that specifies which goal should get the value.
+	 * @param value A Double that indicate how much value to register for the goal; if not given, defaults to 1.0
+	 * @param callback A Callback that will be given a GoalResponse; callback.onValue(GoalResponse)
+	 */
+	public void reward(RequestOptions opts, String goalCode, Double value, Callback<GoalResponse> callback) {
 		JSONArray commands = new JSONArray().put(new JSONObject().put("g", goalCode).put("v", value));
-		this.Exec( opts, commands, new Callback<ExecResponse>() {
+		this.exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
 				if( response == null ) {
 					callback.onValue( new GoalResponse(goalCode, new Exception("response is null")) );
@@ -313,6 +439,7 @@ public class Conductrics {
 		});
 	}
 
+	/** An ExecReponse describes the response to an API call. */
 	public static class ExecResponse {
 		private HashMap<String, SelectResponse> sels = new HashMap<>();
 		private HashMap<String, GoalResponse> rewards = new HashMap<>();
@@ -354,32 +481,53 @@ public class Conductrics {
 				return;
 			}
 		}
+		/** Extract and return a SelectResponse for an agent. */
 		public SelectResponse getSelection(String agentCode, String defaultOption) {
 			if( sels == null || ! sels.containsKey(agentCode) ) {
 				return new SelectResponse(agentCode, defaultOption, "x", new Exception("unknown agent"));
 			}
 			return sels.get(agentCode);
 		}
+		/** Extract and return a GoalResponse for a goal. */
 		public GoalResponse getReward(String goalCode) {
 			if( rewards == null || ! rewards.containsKey(goalCode) ) {
-				return new GoalResponse(goalCode); // will have .acceptedValue(agentCode) == 0 for all agents
+				return new GoalResponse(goalCode); // will have .getAcceptedValue(agentCode) == 0 for all agents
 			}
 			return rewards.get(goalCode);
 		}
+		/** Return the list of traits that were applied to this request. */
 		public List<String> getTraits() {
 			return traits;
 		}
+		/** Return a list of debug messages from this request.
+		 * Populated only if you add .setParam("debug", "true") to the RequestOptions.
+		 */
 		public List<String> getLog() {
 			return log;
 		}
+		/** Return the underlying JSONObject from which the response was extracted. */
 		public JSONObject getJSONObject() {
 			return json;
 		}
-
 		private Exception error;
+		/** Indicate that an error occurred during this request. */
 		public void setError(Exception err) { this.error = err; }
+		/** Return any error that occurred during this request. */
 		public Exception getError() { return error; }
 	}
+	/** Indicates the Policy used to make a selection. @see SelectResponse.getPolicy */
+	public static enum Policy {
+		None,
+		Paused,
+		Random,
+		Fixed,
+		Adaptive,
+		Control,
+		Sticky,
+		Bot,
+		Unknown
+	}
+	/** Describes the result of a selection. */
 	public static class SelectResponse {
 		private String a;
 		private String c;
@@ -417,30 +565,42 @@ public class Conductrics {
 				setError( err );
 			}
 		}
+		/** Return the agent code that made this selection. */
 		public String getAgent() { return a; }
+		/** Return the option code selected by this agent. */
 		public String getCode() { return c; }
-		public String getPolicy() {
+		/** Return the policy used to make this selection. */
+		public Policy getPolicy() {
 			switch( p ) {
-				case "x": return "none";
-				case "p": return "paused";
-				case "r": return "random";
-				case "f": return "fixed";
-				case "a": return "adaptive";
-				case "c": return "control";
-				case "s": return "sticky";
-				case "b": return "bot";
-				default: return p;
+				case "x": return Policy.None;
+				case "p": return Policy.Paused;
+				case "r": return Policy.Random;
+				case "f": return Policy.Fixed;
+				case "a": return Policy.Adaptive;
+				case "c": return Policy.Control;
+				case "s": return Policy.Sticky;
+				case "b": return Policy.Bot;
+				default: return Policy.Unknown;
 			}
 		}
+		/** Return any meta-data associated with this selection.
+		 * Meta data is configured in the Console.
+		 */
 		public String getMeta(String key) { return meta.get(key); }
+
+		/** Return a JSON-compatible description of this selection (without meta-data). */
 		public String toString() { return "{ \"agentCode\": \""+a+"\", \"optionCode\": \""+c+"\", \"policy\": \""+p+"\" }"; }
+
+		/** Return the underlying ExecResponse from which this SelectResponse was extracted. */
 		public ExecResponse getExecResponse() { return execResponse; }
 
 		private Exception error;
+		/** Indicate that an error occurred during this request. */
 		public void setError(Exception err) { this.error = err; }
+		/** Return any error that occurred during this request. */
 		public Exception getError() { return error; }
 	}
-
+	/** Describes the result of a goal. */
 	public static class GoalResponse {
 		private String g;
 		private HashMap<String, Double> rs = new HashMap<String, Double>();
@@ -474,8 +634,10 @@ public class Conductrics {
 			return ret;
 		}
 
-		public String goalCode() { return g; }
-		public Double acceptedValue(String agentCode) {
+		/** Return the goal code to which the value was sent. */
+		public String getGoalCode() { return g; }
+		/** Return the amount of value accepted by a particular agent. */
+		public Double getAcceptedValue(String agentCode) {
 			if( rs == null || ! rs.containsKey(agentCode) ) {
 				return 0.0;
 			}
