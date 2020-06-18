@@ -27,11 +27,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-/* TODO:
- * 3. Reward should not require the callback
- * 4. Support MVT by adding select(List<String> agents)
- */
-
 public class Conductrics {
 
 	/** A Callback<T> is used to handle an asynchronous result of type T.
@@ -62,9 +57,6 @@ public class Conductrics {
 		return sc.hasNext() ? sc.next() : "";
 	}
 
-	private String apiUrl;
-	private String apiKey;
-
 	/** Construct an API instance using an API URL and an API Key
 	 * @param apiUrl an absolute URL, taken from the Conductrics Console > Developers > API Keys section.
 	 * @param apiKey a Conductrics API Key, from the Console.
@@ -73,6 +65,8 @@ public class Conductrics {
 		this.apiUrl = apiUrl;
 		this.apiKey = apiKey;
 	}
+	private String apiUrl;
+	private String apiKey;
 
 	/** RequestOptions contains the configuration to be used when calling select(), reward(), or exec(). */
 	public static class RequestOptions {
@@ -142,18 +136,37 @@ public class Conductrics {
 			input.put(key, val);
 			return this;
 		}
-
-		/** Return an array of all traits that will be applied to this request. */
-		public String[] getTraits() { return params.get("traits").split(","); }
-		/** Use a List to set all the traits for this request. */
-		public RequestOptions setTraits(List<String> v) {
-			params.put("traits", String.join(",", v));
+		public RequestOptions setInput(String key, double value) {
+			input.put(key, String.format("%f", value));
 			return this;
 		}
-		/** Use variadic arguments to set all the traits for this request. */
-		public RequestOptions setTraits(String ... v) {
-			params.put("traits", String.join(",", v));
+		public RequestOptions setInput(String key, long value) {
+			input.put(key, String.format("%d", value));
 			return this;
+		}
+		public RequestOptions setInput(String key, boolean value) {
+			input.put(key, value ? "true" : "false");
+			return this;
+		}
+
+		private List<String> traits = new LinkedList<String>();
+
+		/** Return an array of all traits that will be applied to this request. */
+		public List<String> getTraits() {
+			return traits;
+		}
+		public RequestOptions setTrait(String group, String trait) {
+			traits.add(group + ":" + trait);
+			return this;
+		}
+		public RequestOptions setTrait(String group, long trait) {
+			return setTrait(group, String.format("%d", trait));
+		}
+		public RequestOptions setTrait(String group, double value) {
+			return setTrait(group, String.format("%f", value));
+		}
+		public RequestOptions setTrait(String group, boolean value) {
+			return setTrait(group, (value ? "true" : "false"));
 		}
 
 		/** Return (a copy of) all the URL parameters to be sent with the request.
@@ -327,6 +340,7 @@ public class Conductrics {
 			String url = apiUrl + "?apikey=" + apiKey;
 			try {
 				Map<String, String> params = opts.getParams();
+				params.put("traits", String.join(",", opts.getTraits()));
 				for( String key : params.keySet() ) {
 					url += "&"+key+"="+URLEncoder.encode(params.get(key), "utf-8");
 				}

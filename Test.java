@@ -111,7 +111,8 @@ public class Test {
 		@Override public void run() {
 			started = true;
 			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
-				.setTraits("F:1", "F:2");
+				.setTrait("F", "1")
+				.setTrait("F", "2");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
