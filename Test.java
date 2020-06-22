@@ -1,5 +1,6 @@
 package com.conductrics;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedList;
@@ -267,18 +268,15 @@ public class Test {
 	public static class SelectMultipleTest extends TestCase {
 		@Override public void run() {
 			started = true;
-			List<String> agents = new LinkedList<String>();
-			agents.add("a-example");
-			agents.add("a-example");
-			RequestOptions opts = new RequestOptions(null)
-				.forceOutcome("a-example", "A");
+			List<String> agents = Arrays.asList("a-example", "a-example");
+			RequestOptions opts = new RequestOptions(null);
 			api.select( opts, agents, new Callback<Map<String,SelectResponse>>() {
 				public void onValue(Map<String,SelectResponse> outcomes) {
 					try {
 						SelectResponse outcome = outcomes.get("a-example");
 						assert outcome != null : "Outcome cannot be null";
 						_assertEqual( outcome.getAgent(), "a-example");
-						assert outcome.getPolicy() == Policy.Sticky: "getPolicy() should be none";
+						assert outcome.getPolicy() == Policy.Sticky: "getPolicy() should be sticky: " + outcome.getPolicy().toString();
 						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
