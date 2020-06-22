@@ -418,7 +418,18 @@ public class Conductrics {
 		Map<String, SelectResponse> result = new HashMap<>();
 		JSONArray commands = new JSONArray();
 		for( String agent : agentCodes ) {
-			commands.put(new JSONObject().put("a", agent));
+			JSONObject command = new JSONObject().put("a", agent);
+			if( opts.getProvisional() ) {
+				command.put("s", "p");
+			} else if( opts.getConfirm() ) {
+				command.put("s", "ok");
+			}
+			String forced = opts.getForcedOutcome(agent);
+			if( forced != null ) {
+				result.put(agent, new SelectResponse(agent, forced, "x", new Exception("forced")));
+			} else {
+				commands.put(command);
+			}
 		}
 		this.exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
