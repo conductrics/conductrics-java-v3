@@ -75,7 +75,8 @@ public class Conductrics {
 		private int _timeout = 2000; // Timeout is just an internal option, and not sent with the params
 		private String defaultOption = "A"; // not currently settable
 		private HashMap<String, String> defaultOptions = new HashMap<String, String>();
-		private HashMap<String, String> forceOptions = new HashMap<String, String>();
+		// private HashMap<String, String> forceOptions = new HashMap<String, String>();
+		private boolean offline = false;
 		private boolean provisional = false;
 		private boolean shouldConfirm = false;
 
@@ -206,19 +207,32 @@ public class Conductrics {
 			return this;
 		}
 
+		/** Get the current value of offline mode. */
+		public boolean getOffline() { return offline; }
+		/** Enable or disable "offline mode".
+		 * When in offline mode, no network requests are made.
+		 * All calls to select() return default variations.
+		 */
+		public RequestOptions setOffline(boolean value) {
+			offline = value;
+			return this;
+		}
+
 		/** Return the current "forced outcome".
 		 * If a "forced outcome" is set for an agent, all calls to Select() for that agent, 
 		 * with these options, will skip the API request.
 		 */
-		public String getForcedOutcome(String agentCode) { return forceOptions.get(agentCode); }
+		// public String getForcedOutcome(String agentCode) { return forceOptions.get(agentCode); }
 		/** Set a "forced outcome" for a particular agent.
 		 * Calls to api.Select() that use this RequestOptions will not make a real API request,
 		 * but will instead return a SelectResponse with getCode() == the optionCode given here.
 		 */
+		/*
 		public RequestOptions forceOutcome(String agentCode, String optionCode) {
 			forceOptions.put(agentCode, optionCode);
 			return this;
 		}
+		*/
 	}
 
 	private static class HTTP {
@@ -383,9 +397,15 @@ public class Conductrics {
 	 * @param callback A Callback that will be given a SelectResponse; callback.onValue(SelectResponse)
 	 */
 	public void select(RequestOptions opts, String agentCode, Callback<SelectResponse> callback) {
+		/*
 		String forced = opts.getForcedOutcome(agentCode);
 		if( forced != null ) {
 			callback.onValue( new SelectResponse(agentCode, forced, "x", new Exception("forced")) );
+			return;
+		}
+		*/
+		if( opts.getOffline() ) {
+			callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("offline")));
 			return;
 		}
 		JSONArray commands = new JSONArray();
@@ -418,27 +438,40 @@ public class Conductrics {
 		Map<String, SelectResponse> result = new HashMap<>();
 		JSONArray commands = new JSONArray();
 		for( String agent : agentCodes ) {
-			JSONObject command = new JSONObject().put("a", agent);
-			if( opts.getProvisional() ) {
-				command.put("s", "p");
-			} else if( opts.getConfirm() ) {
-				command.put("s", "ok");
+			if( opts.getOffline() ) {
+				result.put(agent, new SelectResponse(agent, opts.getDefault(agent), "x", new Exception("offline")));
+			} else {
+				JSONObject command = new JSONObject().put("a", agent);
+				if( opts.getProvisional() ) {
+					command.put("s", "p");
+				} else if( opts.getConfirm() ) {
+					command.put("s", "ok");
+				}
+				commands.put(command);
 			}
+			/*
 			String forced = opts.getForcedOutcome(agent);
 			if( forced != null ) {
 				result.put(agent, new SelectResponse(agent, forced, "x", new Exception("forced")));
 			} else {
 				commands.put(command);
 			}
+			*/
 		}
-		this.exec( opts, commands, new Callback<ExecResponse>() {
-			public void onValue(ExecResponse response) {
-				for( String agent : agentCodes ) {
-					result.put(agent, response.getSelection(agent, opts.getDefault(agent)));
+		if( opts.getOffline() ) {
+			callback.onValue( result );
+		} else {
+			this.exec( opts, commands, new Callback<ExecResponse>() {
+				public void onValue(ExecResponse response) {
+					for( String agent : agentCodes ) {
+						if( ! result.containsKey(agent) ) {
+							result.put(agent, response.getSelection(agent, opts.getDefault(agent)));
+						}
+					}
+					callback.onValue( result );
 				}
-				callback.onValue( result );
-			}
-		});
+			});
+		}
 	}
 
 	private Callback<GoalResponse> emptyCallback = new Callback<GoalResponse>() {

@@ -28,7 +28,7 @@ public class Test {
 		executor.execute(new DefaultOptionForInvalidAgent());
 		executor.execute(new UserAgentTest());
 		executor.execute(new InputsTest());
-		executor.execute(new ForceOutcomeTest());
+		executor.execute(new OfflineTest());
 		executor.execute(new TimeoutTest());
 		executor.execute(new SelectMultipleTest());
 		executor.execute(new ProvisionalTest());
@@ -51,7 +51,6 @@ public class Test {
 	}
 
 	public static class TestCase implements Runnable {
-		public boolean started = false;
 		public boolean finished = false;
 		protected Conductrics api = new Conductrics(
 			"https://api-staging-2020.conductrics.com/owner_jesse/v3/agent-api",
@@ -68,7 +67,7 @@ public class Test {
 					+ " : " + testName
 				);
 			} else {
-				System.out.println(testName + ": Test is faulty: attempted double-finish");
+				System.out.println("FAILED! : " + testName + " attempted double-finish");
 			}
 		}
 		public void run() {
@@ -78,9 +77,7 @@ public class Test {
 
 	public static class SessionIsSticky extends TestCase {
 		@Override public void run() {
-			started = true;
-			String sessionId = "s-" + String.format("%f", Math.random()).replace('.','0');
-			RequestOptions opts = new RequestOptions(sessionId);
+			RequestOptions opts = new RequestOptions(null);
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse firstOutcome) {
 					try {
@@ -110,8 +107,7 @@ public class Test {
 
 	public static class TraitsTest extends TestCase {
 		@Override public void run() {
-			started = true;
-			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions(null)
 				.setTrait("F", "1")
 				.setTrait("F", "2");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
@@ -133,8 +129,7 @@ public class Test {
 
 	public static class ParamsTest extends TestCase {
 		@Override public void run() {
-			started = true;
-			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions(null)
 				.setParam("debug", "true");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
@@ -154,8 +149,7 @@ public class Test {
 
 	public static class DefaultOptionForInvalidAgent extends TestCase {
 		@Override public void run() {
-			started = true;
-			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions(null)
 				.setDefault("a-invalid", "B");
 			api.select( opts, "a-invalid", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
@@ -176,8 +170,7 @@ public class Test {
 
 	public static class UserAgentTest extends TestCase {
 		@Override public void run() {
-			started = true;
-			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions(null)
 				.setParam("debug", "true")
 				.setUserAgent("MAGIC STRING");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
@@ -199,8 +192,7 @@ public class Test {
 
 	public static class InputsTest extends TestCase {
 		@Override public void run() {
-			started = true;
-			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions(null)
 				.setInput("foo", "bar");
 			// the a-example agent has been (must be) configured to only return A or B, unless given foo=bar as an input
 			// then it will always select C
@@ -220,10 +212,10 @@ public class Test {
 		}
 	}
 
+	/*
 	public static class ForceOutcomeTest extends TestCase {
 		@Override public void run() {
-			started = true;
-			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions(null)
 				.forceOutcome( "a-example", "D"); // can specify a (normally) impossible outcome
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
@@ -241,11 +233,33 @@ public class Test {
 			});
 		}
 	}
+	*/
+
+	public static class OfflineTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setOffline(true)
+				.setDefault("a-example", "Z");
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						_assertEqual( outcome.getCode(), "Z" );
+						assert outcome.getPolicy() == Policy.None: "getPolicy() should be none";
+						_assertEqual( outcome.getError().getMessage(), "offline" );
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
 
 	public static class TimeoutTest extends TestCase {
 		@Override public void run() {
-			started = true;
-			RequestOptions opts = new RequestOptions("s-" + String.format("%f", Math.random()).replace('.','0'))
+			RequestOptions opts = new RequestOptions(null)
 				.setTimeout(1) // after 1 ms, basically instantly
 				.setDefault("a-example", "E");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
@@ -267,7 +281,6 @@ public class Test {
 
 	public static class SelectMultipleTest extends TestCase {
 		@Override public void run() {
-			started = true;
 			List<String> agents = Arrays.asList("a-example", "a-example");
 			RequestOptions opts = new RequestOptions(null);
 			api.select( opts, agents, new Callback<Map<String,SelectResponse>>() {
@@ -288,7 +301,6 @@ public class Test {
 
 	public static class ProvisionalTest extends TestCase {
 		@Override public void run() {
-			started = true;
 			RequestOptions opts = new RequestOptions(null)
 				.setProvisional(true);
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
