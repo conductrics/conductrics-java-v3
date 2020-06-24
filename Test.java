@@ -36,6 +36,11 @@ public class Test {
 		executor.execute(new SelectMultipleTest());
 		executor.execute(new ProvisionalTest());
 		executor.execute(new AllowedVariantTest());
+		executor.execute(new MetaDataTest());
+		executor.execute(new MetaDataNullTest());
+		executor.execute(new ReuseOptionTest());
+		executor.execute(new RewardTest());
+		executor.execute(new RewardOfflineTest());
 	}
 
 	public static void _assertEqual(String a, String b) throws AssertionError {
@@ -67,11 +72,11 @@ public class Test {
 			if( ! finished ) {
 				finished = true;
 				System.out.println(
-					(optional == null ? "PASSED" : "FAILED!" + optional.toString())
+					(optional == null ? "-- PASSED --" : "-- FAILED --" + optional.toString())
 					+ " : " + testName
 				);
 			} else {
-				System.out.println("FAILED! : " + testName + " attempted double-finish");
+				System.out.println("-- FAILED -- : " + testName + " attempted double-finish");
 			}
 		}
 		public void run() {
@@ -384,6 +389,141 @@ public class Test {
 						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
 						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
 						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class MetaDataTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setAllowedVariants("a-example", "A");
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						_assertEqual( outcome.getCode(), "A");
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
+						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
+						assert "12345".equals(outcome.getMeta("magic")) : "getMeta('magic') should be '12345' got " + outcome.getMeta("magic");
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class MetaDataNullTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setAllowedVariants("a-example", "B");
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						_assertEqual( outcome.getCode(), "B");
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
+						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
+						assert outcome.getMeta("magic") == null : "getMeta('magic') should be null";
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class ReuseOptionTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setProvisional(true);
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
+						assert outcome.getStatus() == Status.Provisional : "getStatus() should be Provisional";
+						opts.setConfirm(true);
+						api.select( opts, "a-example", new Callback<SelectResponse>() {
+							public void onValue(SelectResponse outcome) {
+								assert outcome != null : "Outcome cannot be null";
+								_assertEqual( outcome.getAgent(), "a-example");
+								assert outcome.getPolicy() == Policy.Sticky: "getPolicy() should be Sticky";
+								assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
+							}
+						});
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class RewardTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null);
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						String variant = outcome.getCode();
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
+						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
+						api.reward( opts, "g-example", new Callback<GoalResponse>() {
+							public void onValue(GoalResponse outcome) {
+								try {
+									assert outcome != null : "Outcome cannot be null";
+									assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
+									assert outcome.getAcceptedValue("a-example") == 1.0 : "Accepted value should be 1.0";
+									finish(null);
+								} catch( AssertionError err ) {
+									finish(err);
+								}
+							}
+						});
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class RewardOfflineTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setOffline(true);
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						String variant = outcome.getCode();
+						assert outcome.getPolicy() == Policy.None: "getPolicy() should be None";
+						api.reward( opts, "g-example", new Callback<GoalResponse>() {
+							public void onValue(GoalResponse outcome) {
+								try {
+									assert outcome != null : "Outcome cannot be null";
+									assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
+									assert outcome.getAcceptedValue("a-example") == 0.0 : "Accepted value should be 0.0";
+									finish(null);
+								} catch( AssertionError err ) {
+									finish(err);
+								}
+							}
+						});
 					} catch( AssertionError err ) {
 						finish(err);
 					}
