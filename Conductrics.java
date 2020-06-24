@@ -29,6 +29,24 @@ import java.util.concurrent.TimeUnit;
 
 public class Conductrics {
 
+	/** Indicates the Policy used to make a selection. @see SelectResponse.getPolicy */
+	public static enum Policy {
+		None,
+		Paused,
+		Random,
+		Fixed,
+		Adaptive,
+		Control,
+		Sticky,
+		Bot,
+		Unknown
+	}
+	/** Indicates the Status of a selection. @see SelectResponse.getStatus */
+	public static enum Status {
+		Confirmed,
+		Provisional,
+		Unknown
+	}
 	/** A Callback<T> is used to handle an asynchronous result of type T.
 	 */
 	public static interface Callback<T> {
@@ -340,6 +358,10 @@ public class Conductrics {
 	 * @param callback A Callback that will be given an ExecResponse; callback.onValue(ExecResponse)
 	 */
 	public void exec( RequestOptions opts, JSONArray commands, Callback<ExecResponse> callback) {
+		if( opts == null || opts.getOffline() ) {
+			if( callback != null ) callback.onValue( new ExecResponse( new Exception("offline")));
+			return;
+		}
 		try {
 			String body = "{ \"commands\": " + commands.toString();
 			JSONObject inputs = new JSONObject(opts.getInputs());
@@ -360,13 +382,13 @@ public class Conductrics {
 				}
 			} catch( java.io.UnsupportedEncodingException e) {
 				log("Failed to produce a valid API url: " + e.getLocalizedMessage());
-				callback.onValue( new ExecResponse( e ));
+				if( callback != null ) callback.onValue( new ExecResponse( e ));
 				return;
 			}
 			HTTP.request("POST", url, body, opts.getTimeout(), headers, new CallbackWithError<String>() {
 				public void onValue(String responseBody) {
 					if( responseBody == null ) {
-						callback.onValue(new ExecResponse(new Exception("response body is null")));
+						if( callback != null ) callback.onValue(new ExecResponse(new Exception("response body is null")));
 						return;
 					}
 					log("POST response: " + responseBody);
@@ -374,16 +396,16 @@ public class Conductrics {
 					if( result.getInt("status") == 200 ) {
 						JSONObject data = result.getJSONObject("data");
 						if( data != null ) {
-							callback.onValue(new ExecResponse(data));
+							if( callback != null ) callback.onValue(new ExecResponse(data));
 						} else {
-							callback.onValue(new ExecResponse(new Exception("no 'data' key in JSON response")));
+							if( callback != null ) callback.onValue(new ExecResponse(new Exception("no 'data' key in JSON response")));
 						}
 					} else {
-						callback.onValue(new ExecResponse(new Exception("bad 'status' value in JSON response: " + responseBody)));
+						if( callback != null ) callback.onValue(new ExecResponse(new Exception("bad 'status' value in JSON response: " + responseBody)));
 					}
 				}
 				public void onError(Exception err) {
-					callback.onValue(new ExecResponse(err));
+					if( callback != null ) callback.onValue(new ExecResponse(err));
 				}
 			});
 		} catch (JSONException err ) {
@@ -405,7 +427,7 @@ public class Conductrics {
 		}
 		*/
 		if( opts.getOffline() ) {
-			callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("offline")));
+			if( callback != null ) callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("offline")));
 			return;
 		}
 		JSONArray commands = new JSONArray();
@@ -418,6 +440,7 @@ public class Conductrics {
 		commands.put(command);
 		this.exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
+				if( callback == null ) return;
 				if( response == null ) {
 					callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("null response")) );
 				} else if( response.getError() != null ) {
@@ -459,7 +482,7 @@ public class Conductrics {
 			*/
 		}
 		if( opts.getOffline() ) {
-			callback.onValue( result );
+			if( callback != null ) callback.onValue( result );
 		} else {
 			this.exec( opts, commands, new Callback<ExecResponse>() {
 				public void onValue(ExecResponse response) {
@@ -468,7 +491,7 @@ public class Conductrics {
 							result.put(agent, response.getSelection(agent, opts.getDefault(agent)));
 						}
 					}
-					callback.onValue( result );
+					if( callback != null ) callback.onValue( result );
 				}
 			});
 		}
@@ -502,9 +525,14 @@ public class Conductrics {
 	 * @param callback A Callback that will be given a GoalResponse; callback.onValue(GoalResponse)
 	 */
 	public void reward(RequestOptions opts, String goalCode, Double value, Callback<GoalResponse> callback) {
+		if( opts.getOffline() ) {
+			if( callback != null ) callback.onValue( new GoalResponse(goalCode, new Exception("offline")));
+			return;
+		}
 		JSONArray commands = new JSONArray().put(new JSONObject().put("g", goalCode).put("v", value));
 		this.exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
+				if( callback == null ) return;
 				if( response == null ) {
 					callback.onValue( new GoalResponse(goalCode, new Exception("response is null")) );
 				} else if( response.getError() != null ) {
@@ -591,23 +619,6 @@ public class Conductrics {
 		public void setError(Exception err) { this.error = err; }
 		/** Return any error that occurred during this request. */
 		public Exception getError() { return error; }
-	}
-	/** Indicates the Policy used to make a selection. @see SelectResponse.getPolicy */
-	public static enum Policy {
-		None,
-		Paused,
-		Random,
-		Fixed,
-		Adaptive,
-		Control,
-		Sticky,
-		Bot,
-		Unknown
-	}
-	public static enum Status {
-		Confirmed,
-		Provisional,
-		Unknown
 	}
 	/** Describes the result of a selection. */
 	public static class SelectResponse {

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.LinkedList;
 
+import com.conductrics.Conductrics.ExecResponse;
 import com.conductrics.Conductrics.SelectResponse;
 import com.conductrics.Conductrics.GoalResponse;
 import com.conductrics.Conductrics.RequestOptions;
@@ -28,7 +29,9 @@ public class Test {
 		executor.execute(new DefaultOptionForInvalidAgent());
 		executor.execute(new UserAgentTest());
 		executor.execute(new InputsTest());
-		executor.execute(new OfflineTest());
+		executor.execute(new OfflineTestExec());
+		executor.execute(new OfflineTestSelect());
+		executor.execute(new OfflineTestReward());
 		executor.execute(new TimeoutTest());
 		executor.execute(new SelectMultipleTest());
 		executor.execute(new ProvisionalTest());
@@ -235,7 +238,7 @@ public class Test {
 	}
 	*/
 
-	public static class OfflineTest extends TestCase {
+	public static class OfflineTestSelect extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setOffline(true)
@@ -247,6 +250,43 @@ public class Test {
 						_assertEqual( outcome.getAgent(), "a-example");
 						_assertEqual( outcome.getCode(), "Z" );
 						assert outcome.getPolicy() == Policy.None: "getPolicy() should be none";
+						_assertEqual( outcome.getError().getMessage(), "offline" );
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+	public static class OfflineTestExec extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setOffline(true);
+			api.exec( opts, null, new Callback<ExecResponse>() {
+				public void onValue(ExecResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						assert outcome.getJSONObject() == null : "Outcome should have no JSON associated.";
+						_assertEqual( outcome.getError().getMessage(), "offline" );
+						finish(null);
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+	public static class OfflineTestReward extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setOffline(true);
+			api.reward( opts, "g-example", new Callback<GoalResponse>() {
+				public void onValue(GoalResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getGoalCode(), "g-example");
+						assert outcome.getAcceptedValue("a-example") == 0.0 : "Goal should not accept any value";
 						_assertEqual( outcome.getError().getMessage(), "offline" );
 						finish(null);
 					} catch( AssertionError err ) {
