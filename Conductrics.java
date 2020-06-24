@@ -7,6 +7,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONException;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
@@ -93,7 +94,7 @@ public class Conductrics {
 		private int _timeout = 2000; // Timeout is just an internal option, and not sent with the params
 		private String defaultOption = "A"; // not currently settable
 		private HashMap<String, String> defaultOptions = new HashMap<String, String>();
-		// private HashMap<String, String> forceOptions = new HashMap<String, String>();
+		private HashMap<String, List<String>> allowed = new HashMap<>();
 		private boolean offline = false;
 		private boolean provisional = false;
 		private boolean shouldConfirm = false;
@@ -236,21 +237,27 @@ public class Conductrics {
 			return this;
 		}
 
-		/** Return the current "forced outcome".
-		 * If a "forced outcome" is set for an agent, all calls to Select() for that agent, 
-		 * with these options, will skip the API request.
+		/** Get the (limited set of) variants allowed for an agent.
+		 * Can return null, which means all possible variants are allowed.
 		 */
-		// public String getForcedOutcome(String agentCode) { return forceOptions.get(agentCode); }
-		/** Set a "forced outcome" for a particular agent.
-		 * Calls to api.Select() that use this RequestOptions will not make a real API request,
-		 * but will instead return a SelectResponse with getCode() == the optionCode given here.
+		public List<String> getAllowedVariants(String agentCode) {
+			return allowed.get(agentCode);
+		}
+		/** Set the allowed variants for an agent.
+		 * Will constrain future calls to select(). 
 		 */
-		/*
-		public RequestOptions forceOutcome(String agentCode, String optionCode) {
-			forceOptions.put(agentCode, optionCode);
+		public RequestOptions setAllowedVariants(String agentCode, String... variants) {
+			return setAllowedVariants(agentCode, Arrays.asList(variants));
+		}
+		/** Set the allowed variants for an agent.
+		 * Will constrain future calls to select(). 
+		 */
+		public RequestOptions setAllowedVariants(String agentCode, List<String> variants) {
+			if( variants.size() > 0 ) {
+				allowed.put(agentCode, variants);
+			}
 			return this;
 		}
-		*/
 	}
 
 	private static class HTTP {
@@ -419,13 +426,6 @@ public class Conductrics {
 	 * @param callback A Callback that will be given a SelectResponse; callback.onValue(SelectResponse)
 	 */
 	public void select(RequestOptions opts, String agentCode, Callback<SelectResponse> callback) {
-		/*
-		String forced = opts.getForcedOutcome(agentCode);
-		if( forced != null ) {
-			callback.onValue( new SelectResponse(agentCode, forced, "x", new Exception("forced")) );
-			return;
-		}
-		*/
 		if( opts.getOffline() ) {
 			if( callback != null ) callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("offline")));
 			return;
@@ -436,6 +436,10 @@ public class Conductrics {
 			command.put("s", "p");
 		} else if( opts.getConfirm() ) {
 			command.put("s", "ok");
+		}
+		List<String> allowed = opts.getAllowedVariants(agentCode);
+		if( allowed != null ) {
+			command.put("c", new JSONArray(allowed));
 		}
 		commands.put(command);
 		this.exec( opts, commands, new Callback<ExecResponse>() {
@@ -470,16 +474,12 @@ public class Conductrics {
 				} else if( opts.getConfirm() ) {
 					command.put("s", "ok");
 				}
+				List<String> allowed = opts.getAllowedVariants(agent);
+				if( allowed != null ) {
+					command.put("c", new JSONArray(allowed));
+				}
 				commands.put(command);
 			}
-			/*
-			String forced = opts.getForcedOutcome(agent);
-			if( forced != null ) {
-				result.put(agent, new SelectResponse(agent, forced, "x", new Exception("forced")));
-			} else {
-				commands.put(command);
-			}
-			*/
 		}
 		if( opts.getOffline() ) {
 			if( callback != null ) callback.onValue( result );

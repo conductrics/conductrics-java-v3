@@ -35,6 +35,7 @@ public class Test {
 		executor.execute(new TimeoutTest());
 		executor.execute(new SelectMultipleTest());
 		executor.execute(new ProvisionalTest());
+		executor.execute(new AllowedVariantTest());
 	}
 
 	public static void _assertEqual(String a, String b) throws AssertionError {
@@ -362,6 +363,27 @@ public class Test {
 								}
 							}
 						});
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	public static class AllowedVariantTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setAllowedVariants("a-example", "B");
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						_assertEqual( outcome.getCode(), "B");
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
+						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
+						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
 					}
