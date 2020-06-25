@@ -58,14 +58,17 @@ public class Test {
 		);
 
 		public TestCase() {}
-		public void finish(Error optional) {
+		public void finish(Error err) {
 			String testName = this.getClass().getName().split("\\$")[1];
 			if( ! finished ) {
 				finished = true;
 				System.out.println(
-					(optional == null ? "PASSED" : "FAILED!" + optional.toString())
+					(err == null ? "PASSED" : "FAILED!" + err.toString())
 					+ " : " + testName
 				);
+				if( err != null ) {
+					System.exit(1);
+				}
 			} else {
 				System.out.println(testName + ": Test is faulty: attempted double-finish");
 			}
