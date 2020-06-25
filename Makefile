@@ -45,4 +45,6 @@ snapshot: maven/snapshot/com/conductrics/Conductrics/${VERSION}/Conductrics-${VE
 	aws s3 sync ./maven s3://conductrics-maven-repo/
 
 clean:
-	rm -rf org/json com/conductrics Conductrics.jar Conductrics-${VERSION}.jar META-INF/
+	rm -rf org/json com/conductrics Conductrics.jar Conductrics-${VERSION}.jar META-INF/ ./maven
+
+.PHONY: test clean publish
