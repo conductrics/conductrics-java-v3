@@ -22,7 +22,7 @@ Conductrics-${VERSION}.jar: com/conductrics/Conductrics.class org/json/JSONObjec
 	touch $@
 
 test: .test-artifact all
-	# Tests are passing
+	# All tests are passing
 
 maven/release/com/conductrics/Conductrics/${VERSION}/Conductrics-${VERSION}.jar: Conductrics-${VERSION}.jar
 	# Building Maven repo (release)...
