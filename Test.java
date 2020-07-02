@@ -347,6 +347,8 @@ public class Test {
 						SelectResponse outcome = outcomes.get("a-example");
 						assert outcome != null : "Outcome cannot be null";
 						_assertEqual( outcome.getAgent(), "a-example");
+						// Because we got the same selection twice, the second one will be the only outcome in the map
+						// and, that second SelectResponse should be a sticky version of the first one
 						assert outcome.getPolicy() == Policy.Sticky: "getPolicy() should be sticky: " + outcome.getPolicy().toString();
 						finish(null);
 					} catch( AssertionError err ) {
