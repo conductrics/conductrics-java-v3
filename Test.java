@@ -40,26 +40,26 @@ public class Test {
 		executor.execute(new MetaDataNullTest());
 		executor.execute(new ReuseOptionTest());
 		executor.execute(new RewardTest());
-		executor.execute(new RewardOfflineTest());
+		executor.execute(new FullSessionOfflineTest());
 	}
 
-	public static void _assertEqual(String a, String b) throws AssertionError {
+	static void _assertEqual(String a, String b) throws AssertionError {
 		if( a == null && b == null ) return;
 		if( a != null && b == null ) assert false : a + " should equal null";
 		if( a == null && b != null ) assert false : "null should equal " + b;
 		// System.out.println("Assert Equal: " + a + " == " + b + " " + a.equals(b));
 		assert a.equals(b) : "'" + a + "' should equal '" + b + "'";
 	}
-	public static void _assertOneOf(String a, String... b) {
+	static void _assertOneOf(String a, String... b) {
 		assert a != null;
 		for( String s: b ) if( (a == null && s == null) || a.equals(s) ) return;
 		assert false : a + " should be one of: " + String.join(",", b);
 	}
-	public static void _assertInList(String a, List<String> b) {
+	static void _assertInList(String a, List<String> b) {
 		assert b.contains(a);
 	}
 
-	public static class TestCase implements Runnable {
+	static class TestCase implements Runnable {
 		public boolean finished = false;
 		protected Conductrics api = new Conductrics(
 			"https://api-staging-2020.conductrics.com/owner_jesse/v3/agent-api",
@@ -87,7 +87,7 @@ public class Test {
 		}
 	}
 
-	public static class SessionIsSticky extends TestCase {
+	static class SessionIsSticky extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null);
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
@@ -117,7 +117,7 @@ public class Test {
 		}
 	}
 
-	public static class TraitsTest extends TestCase {
+	static class TraitsTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setTrait("F", "1")
@@ -139,7 +139,7 @@ public class Test {
 		}
 	}
 
-	public static class ParamsTest extends TestCase {
+	static class ParamsTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setParam("debug", "true");
@@ -159,7 +159,7 @@ public class Test {
 		}
 	}
 
-	public static class DefaultOptionForInvalidAgent extends TestCase {
+	static class DefaultOptionForInvalidAgent extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setDefault("a-invalid", "B");
@@ -180,7 +180,7 @@ public class Test {
 		}
 	}
 
-	public static class UserAgentTest extends TestCase {
+	static class UserAgentTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setParam("debug", "true")
@@ -202,7 +202,7 @@ public class Test {
 		}
 	}
 
-	public static class InputsTest extends TestCase {
+	static class InputsTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setInput("foo", "bar");
@@ -224,30 +224,7 @@ public class Test {
 		}
 	}
 
-	/*
-	public static class ForceOutcomeTest extends TestCase {
-		@Override public void run() {
-			RequestOptions opts = new RequestOptions(null)
-				.forceOutcome( "a-example", "D"); // can specify a (normally) impossible outcome
-			api.select( opts, "a-example", new Callback<SelectResponse>() {
-				public void onValue(SelectResponse outcome) {
-					try {
-						assert outcome != null : "Outcome cannot be null";
-						_assertEqual( outcome.getAgent(), "a-example");
-						_assertEqual( outcome.getCode(), "D" );
-						assert outcome.getPolicy() == Policy.None: "getPolicy() should be none";
-						_assertEqual( outcome.getError().getMessage(), "forced" );
-						finish(null);
-					} catch( AssertionError err ) {
-						finish(err);
-					}
-				}
-			});
-		}
-	}
-	*/
-
-	public static class OfflineTestSelect extends TestCase {
+	static class OfflineTestSelect extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setOffline(true)
@@ -268,7 +245,7 @@ public class Test {
 			});
 		}
 	}
-	public static class OfflineTestExec extends TestCase {
+	static class OfflineTestExec extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setOffline(true);
@@ -286,7 +263,7 @@ public class Test {
 			});
 		}
 	}
-	public static class OfflineTestReward extends TestCase {
+	static class OfflineTestReward extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setOffline(true);
@@ -305,8 +282,38 @@ public class Test {
 			});
 		}
 	}
+	static class FullSessionOfflineTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setOffline(true);
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						String variant = outcome.getCode();
+						assert outcome.getPolicy() == Policy.None: "getPolicy() should be None";
+						api.reward( opts, "g-example", new Callback<GoalResponse>() {
+							public void onValue(GoalResponse outcome) {
+								try {
+									assert outcome != null : "Outcome cannot be null";
+									assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
+									assert outcome.getAcceptedValue("a-example") == 0.0 : "Accepted value should be 0.0";
+									finish(null);
+								} catch( AssertionError err ) {
+									finish(err);
+								}
+							}
+						});
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
 
-	public static class TimeoutTest extends TestCase {
+	static class TimeoutTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setTimeout(1) // after 1 ms, basically instantly
@@ -328,7 +335,7 @@ public class Test {
 		}
 	}
 
-	public static class SelectMultipleTest extends TestCase {
+	static class SelectMultipleTest extends TestCase {
 		@Override public void run() {
 			List<String> agents = Arrays.asList("a-example", "a-example");
 			RequestOptions opts = new RequestOptions(null);
@@ -348,7 +355,7 @@ public class Test {
 		}
 	}
 
-	public static class ProvisionalTest extends TestCase {
+	static class ProvisionalTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setProvisional(true);
@@ -379,7 +386,7 @@ public class Test {
 		}
 	}
 
-	public static class AllowedVariantTest extends TestCase {
+	static class AllowedVariantTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setAllowedVariants("a-example", "B");
@@ -400,7 +407,7 @@ public class Test {
 		}
 	}
 
-	public static class MetaDataTest extends TestCase {
+	static class MetaDataTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setAllowedVariants("a-example", "A");
@@ -422,7 +429,7 @@ public class Test {
 		}
 	}
 
-	public static class MetaDataNullTest extends TestCase {
+	static class MetaDataNullTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setAllowedVariants("a-example", "B");
@@ -444,7 +451,7 @@ public class Test {
 		}
 	}
 
-	public static class ReuseOptionTest extends TestCase {
+	static class ReuseOptionTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
 				.setProvisional(true);
@@ -473,7 +480,7 @@ public class Test {
 		}
 	}
 
-	public static class RewardTest extends TestCase {
+	static class RewardTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null);
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
@@ -504,34 +511,4 @@ public class Test {
 		}
 	}
 
-	public static class RewardOfflineTest extends TestCase {
-		@Override public void run() {
-			RequestOptions opts = new RequestOptions(null)
-				.setOffline(true);
-			api.select( opts, "a-example", new Callback<SelectResponse>() {
-				public void onValue(SelectResponse outcome) {
-					try {
-						assert outcome != null : "Outcome cannot be null";
-						_assertEqual( outcome.getAgent(), "a-example");
-						String variant = outcome.getCode();
-						assert outcome.getPolicy() == Policy.None: "getPolicy() should be None";
-						api.reward( opts, "g-example", new Callback<GoalResponse>() {
-							public void onValue(GoalResponse outcome) {
-								try {
-									assert outcome != null : "Outcome cannot be null";
-									assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
-									assert outcome.getAcceptedValue("a-example") == 0.0 : "Accepted value should be 0.0";
-									finish(null);
-								} catch( AssertionError err ) {
-									finish(err);
-								}
-							}
-						});
-					} catch( AssertionError err ) {
-						finish(err);
-					}
-				}
-			});
-		}
-	}
 }
