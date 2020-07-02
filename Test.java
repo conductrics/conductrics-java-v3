@@ -41,6 +41,7 @@ public class Test {
 		executor.execute(new ReuseOptionTest());
 		executor.execute(new RewardTest());
 		executor.execute(new FullSessionOfflineTest());
+		executor.execute(new ProvisionalRewardTest());
 	}
 
 	static void _assertEqual(String a, String b) throws AssertionError {
@@ -498,6 +499,61 @@ public class Test {
 									assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
 									assert outcome.getAcceptedValue("a-example") == 1.0 : "Accepted value should be 1.0";
 									finish(null);
+								} catch( AssertionError err ) {
+									finish(err);
+								}
+							}
+						});
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	static class ProvisionalRewardTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null)
+				.setProvisional(true);
+			String agentCode = "a-example";
+			String goalCode = "g-example";
+			api.select( opts, agentCode, new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), agentCode);
+						assert outcome.getStatus() == Status.Provisional : "getStatus() should be Provisional";
+						api.reward(opts, goalCode, new Callback<GoalResponse>() {
+							public void onValue(GoalResponse goalResponse) {
+								try {
+									assert goalResponse != null : "GoalResponse cannot be null";
+									_assertEqual( goalResponse.getGoalCode(), goalCode );
+									assert goalResponse.getAcceptedValue(agentCode) == 0.0 : "Goals should not be accepted for provisional selections";
+									opts.setConfirm(true);
+									api.select(opts, agentCode, new Callback<SelectResponse>() {
+										public void onValue(SelectResponse outcome2) {
+											try {
+												assert outcome2 != null : "Outcome cannot be null";
+												_assertEqual( outcome2.getAgent(), agentCode);
+												assert outcome2.getStatus() == Status.Confirmed: "getStatus() should be Provisional";
+												api.reward(opts, goalCode, new Callback<GoalResponse>() {
+													public void onValue(GoalResponse goalResponse2) {
+														try {
+															assert goalResponse2 != null : "GoalResponse (#2) cannot be null";
+															_assertEqual( goalResponse2.getGoalCode(), goalCode );
+															assert goalResponse2.getAcceptedValue(agentCode) == 1.0 : "Goals should be accepted once a provisional selection is confirmed.";
+															finish(null);
+														} catch( AssertionError err ) {
+															finish(err);
+														}
+													}
+												});
+											} catch( AssertionError err ) {
+												finish(err);
+											}
+										}
+									});
 								} catch( AssertionError err ) {
 									finish(err);
 								}
