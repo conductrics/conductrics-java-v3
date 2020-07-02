@@ -40,6 +40,7 @@ public class Test {
 		executor.execute(new MetaDataNullTest());
 		executor.execute(new ReuseOptionTest());
 		executor.execute(new RewardTest());
+		executor.execute(new DoubleRewardTest());
 		executor.execute(new FullSessionOfflineTest());
 		executor.execute(new ProvisionalRewardTest());
 	}
@@ -499,6 +500,48 @@ public class Test {
 									assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
 									assert outcome.getAcceptedValue("a-example") == 1.0 : "Accepted value should be 1.0";
 									finish(null);
+								} catch( AssertionError err ) {
+									finish(err);
+								}
+							}
+						});
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	static class DoubleRewardTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null);
+			api.select( opts, "a-example", new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), "a-example");
+						String variant = outcome.getCode();
+						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
+						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
+						api.reward( opts, "g-example", new Callback<GoalResponse>() {
+							public void onValue(GoalResponse outcome) {
+								try {
+									assert outcome != null : "Outcome cannot be null";
+									assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
+									assert outcome.getAcceptedValue("a-example") == 1.0 : "Accepted value should be 1.0";
+									api.reward( opts, "g-example", new Callback<GoalResponse>() {
+										public void onValue(GoalResponse outcome) {
+											try {
+												assert outcome != null : "Outcome cannot be null";
+												assert "g-example".equals(outcome.getGoalCode()) : "Goal should be g-example";
+												assert outcome.getAcceptedValue("a-example") == 0.0 : "Accepted value should be 0.0, already rewarded.";
+												finish(null);
+											} catch( AssertionError err ) {
+												finish(err);
+											}
+										}
+									});
 								} catch( AssertionError err ) {
 									finish(err);
 								}
