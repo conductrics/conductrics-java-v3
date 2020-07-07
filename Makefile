@@ -1,11 +1,12 @@
 
 VERSION=$(shell cat VERSION)
+JAVAC:=javac
 
 all: Conductrics-${VERSION}.jar
 
 com/conductrics/%.class: %.java org/json/JSONObject.class
 	# Compiling source file $<...
-	javac -classpath "." -d . $<
+	${JAVAC} -classpath "." -d . $<
 
 org/json/%: json-20190722.jar
 	# Unpacking json jar
