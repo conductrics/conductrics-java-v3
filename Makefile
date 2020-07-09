@@ -12,7 +12,7 @@ com/conductrics/%.class: src/%.java org/json/JSONObject.class
 
 test/%.class: test/%.java org/json/JSONObject.class
 	# Compiling source file $<...
-	${JAVAC} -classpath "." -d . $<
+	${JAVAC} -classpath "." -d test $<
 
 org/json/%: json-20190722.jar
 	# Unpacking json jar
@@ -25,10 +25,10 @@ Conductrics-${VERSION}.jar: ${CLASS_FILES} org/json/JSONObject.class
 
 .test-artifact: test/Test.class com/conductrics/Conductrics.class
 	# Running tests...
-	java -ea -classpath "Conductrics-${VERSION}.jar:." test.Test
+	java -ea -classpath "Conductrics-${VERSION}.jar:./test" Test
 	touch $@
 
-test: .test-artifact all ${CLASS_FILES}
+test: all .test-artifact
 	# All tests are passing
 
 maven-sync:
