@@ -194,7 +194,10 @@ public class Conductrics {
 			String url = apiUrl + "?apikey=" + apiKey;
 			try {
 				Map<String, String> params = opts.getParams();
-				params.put("traits", String.join(",", opts.getTraits()));
+				List<String> traits = opts.getTraits();
+				if( traits.size() > 0 ) {
+					params.put("traits", String.join(",", traits));
+				}
 				for( String key : params.keySet() ) {
 					url += "&"+key+"="+URLEncoder.encode(params.get(key), "utf-8");
 				}
@@ -214,7 +217,7 @@ public class Conductrics {
 					if( result.getInt("status") == 200 ) {
 						JSONObject data = result.getJSONObject("data");
 						if( data != null ) {
-							if( callback != null ) callback.onValue(new ExecResponse(data));
+							if( callback != null ) callback.onValue(new ExecResponse(data, opts));
 						} else {
 							if( callback != null ) callback.onValue(new ExecResponse(new Exception("no 'data' key in JSON response")));
 						}
@@ -256,12 +259,13 @@ public class Conductrics {
 		this.exec( opts, commands, new Callback<ExecResponse>() {
 			public void onValue(ExecResponse response) {
 				if( callback == null ) return;
+				String def = opts.getDefault(agentCode);
 				if( response == null ) {
-					callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", new Exception("null response")) );
+					callback.onValue( new SelectResponse(agentCode, def, "x", new Exception("null response")) );
 				} else if( response.getError() != null ) {
-					callback.onValue( new SelectResponse(agentCode, opts.getDefault(agentCode), "x", response.getError()));
+					callback.onValue( new SelectResponse(agentCode, def, "x", response.getError()));
 				} else {
-					callback.onValue( response.getSelection( agentCode, opts.getDefault(agentCode) ));
+					callback.onValue( response.getSelection( agentCode, def ));
 				}
 			}
 		});
