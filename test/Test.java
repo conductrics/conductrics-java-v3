@@ -1,17 +1,18 @@
-package com.conductrics;
+package test;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.LinkedList;
 
-import com.conductrics.Conductrics.ExecResponse;
-import com.conductrics.Conductrics.SelectResponse;
-import com.conductrics.Conductrics.GoalResponse;
-import com.conductrics.Conductrics.RequestOptions;
-import com.conductrics.Conductrics.Callback;
-import com.conductrics.Conductrics.Policy;
-import com.conductrics.Conductrics.Status;
+import com.conductrics.Conductrics;
+import com.conductrics.ExecResponse;
+import com.conductrics.SelectResponse;
+import com.conductrics.GoalResponse;
+import com.conductrics.RequestOptions;
+import com.conductrics.Callback;
+import com.conductrics.Policy;
+import com.conductrics.Status;
 
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -95,10 +96,10 @@ public class Test {
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse firstOutcome) {
 					try {
-						_assertEqual( firstOutcome.getAgent(), "a-example");
-						_assertOneOf( firstOutcome.getCode(), "A", "B" );
-						assert firstOutcome.getPolicy() == Policy.Random : "getPolicy() should be random";
 						assert firstOutcome.getError() == null : "getError() should be null";
+						_assertEqual( firstOutcome.getAgent(), "a-example");
+						assert firstOutcome.getPolicy() == Policy.Random : "getPolicy() should be random";
+						_assertOneOf( firstOutcome.getCode(), "A", "B" );
 						api.select( opts, "a-example", new Callback<SelectResponse>() {
 							public void onValue(SelectResponse secondOutcome) {
 								try {

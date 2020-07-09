@@ -1,10 +1,16 @@
 
 VERSION=$(shell cat VERSION)
 JAVAC:=javac
+JAVA_FILES=$(wildcard src/*.java)
+CLASS_FILES=$(subst src/,com/conductrics/,$(subst .java,.class,${JAVA_FILES}))
 
 all: Conductrics-${VERSION}.jar
 
-com/conductrics/%.class: %.java org/json/JSONObject.class
+com/conductrics/%.class: src/%.java org/json/JSONObject.class
+	# Compiling source file $<...
+	${JAVAC} -classpath "." -d . src/*.java
+
+test/%.class: test/%.java org/json/JSONObject.class
 	# Compiling source file $<...
 	${JAVAC} -classpath "." -d . $<
 
@@ -13,16 +19,16 @@ org/json/%: json-20190722.jar
 	jar xf $<
 	touch $@
 
-Conductrics-${VERSION}.jar: com/conductrics/Conductrics.class org/json/JSONObject.class
+Conductrics-${VERSION}.jar: ${CLASS_FILES} org/json/JSONObject.class
 	# Packing jar file...
-	jar cf $@ com/conductrics/Conductrics.class org/json/*.class
+	jar cf $@ com/conductrics/*.class org/json/*.class
 
-.test-artifact: com/conductrics/Test.class com/conductrics/Conductrics.class
+.test-artifact: test/Test.class com/conductrics/Conductrics.class
 	# Running tests...
-	java -ea -classpath "Conductrics-${VERSION}.jar:." com.conductrics.Test
+	java -ea -classpath "Conductrics-${VERSION}.jar:." test.Test
 	touch $@
 
-test: .test-artifact all
+test: .test-artifact all ${CLASS_FILES}
 	# All tests are passing
 
 maven/release/com/conductrics/Conductrics/${VERSION}/Conductrics-${VERSION}.jar: Conductrics-${VERSION}.jar
@@ -46,6 +52,6 @@ snapshot: maven/snapshot/com/conductrics/Conductrics/${VERSION}/Conductrics-${VE
 	aws s3 sync ./maven s3://conductrics-maven-repo/
 
 clean:
-	rm -rf org/json com/conductrics Conductrics.jar Conductrics-${VERSION}.jar META-INF/ ./maven
+	rm -rf test/*.class org/json com/conductrics Conductrics.jar Conductrics-*.jar META-INF/ ./maven
 
 .PHONY: test clean publish
