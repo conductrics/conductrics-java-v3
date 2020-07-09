@@ -17,7 +17,7 @@ import com.conductrics.ExecResponse;
 public class SelectResponse {
 	private String a;
 	private String c;
-	private String p;
+	private Policy p = Policy.Unknown;
 	private Status s = Status.Unknown;
 	private HashMap<String, String> meta;
 	private ExecResponse execResponse;
@@ -25,19 +25,25 @@ public class SelectResponse {
 		meta = new HashMap<>();
 		a = A;
 		c = C;
-		p = P;
+		p = getPolicy(P);
 	}
 	SelectResponse(String A, String C, String P, Exception err) {
 		meta = new HashMap<>();
-		a = A; c = C; p = P;
+		a = A;
+		c = C;
+		p = getPolicy(P);
 		setError(err);
 	}
-	SelectResponse(JSONObject item, ExecResponse source) { // note: this is not the whole response,
+	SelectResponse(JSONObject item, ExecResponse source, String A, String C) { // note: this is not the whole response,
 		try {
 			execResponse = source;
 			a = item.getString("a");
+			if( a == null ) a = A;
 			c = item.getString("c");
-			p = item.getString("p");
+			if( c == null ) c = C;
+			String _p = item.getString("p");
+			if( _p == null ) _p = "x";
+			p = getPolicy(_p);
 			meta = new HashMap<>();
 			JSONObject md = item.getJSONObject("md");
 			Iterator<String> keys = md.keys();
@@ -61,9 +67,10 @@ public class SelectResponse {
 	public String getAgent() { return a; }
 	/** Return the option code selected by this agent. */
 	public String getCode() { return c; }
-	/** Return the policy used to make this selection. */
-	public Policy getPolicy() {
-		switch( p ) {
+
+	// how to map the internal api response codes to our enum
+	private static Policy getPolicy(String s) {
+		switch( s ) {
 			case "x": return Policy.None;
 			case "p": return Policy.Paused;
 			case "r": return Policy.Random;
@@ -75,6 +82,10 @@ public class SelectResponse {
 			default: return Policy.Unknown;
 		}
 	}
+
+	/** Return the policy used to make this selection. */
+	public Policy getPolicy() { return p; }
+
 	/** Return any meta-data associated with this selection.
 	 * Meta data is configured in the Console.
 	 */

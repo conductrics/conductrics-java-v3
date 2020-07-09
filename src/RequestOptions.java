@@ -11,7 +11,7 @@ public class RequestOptions {
 	private HashMap<String, String> params = new HashMap<String, String>(); // Ultimately, a set of RequestOptions will become parameters to an HTTP request
 	private HashMap<String, String> input = new HashMap<String, String>();
 	private int _timeout = 2000; // Timeout is just an internal option, and not sent with the params
-	private String defaultOption = "A"; // not currently settable
+	private String defaultOption = "A";
 	private HashMap<String, String> defaultOptions = new HashMap<String, String>();
 	private HashMap<String, List<String>> allowed = new HashMap<>();
 	private boolean offline = false;

@@ -23,7 +23,7 @@ public class ExecResponse {
 	public ExecResponse(Exception err) {
 		setError( err );
 	}
-	public ExecResponse(JSONObject response) {
+	public ExecResponse(JSONObject response, RequestOptions opts) {
 		if( response == null ) {
 			return;
 		}
@@ -45,7 +45,8 @@ public class ExecResponse {
 			for(int i = 0 ; i < items.length(); i++ ) {
 				JSONObject item = items.getJSONObject(i);
 				if( item.has("a") ) {
-					sels.put(item.getString("a"), new SelectResponse(item, this));
+					String a = item.getString("a");
+					sels.put(a, new SelectResponse(item, this, a, opts.getDefault(a)));
 				} else if( item.has( "g") ) {
 					rewards.put(item.getString("g"), new GoalResponse(item));
 				}
