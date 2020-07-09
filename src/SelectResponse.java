@@ -22,12 +22,18 @@ public class SelectResponse {
 	private HashMap<String, String> meta;
 	private ExecResponse execResponse;
 	SelectResponse(String A, String C, String P) {
+		if( A == null ) throw new IllegalArgumentException("A");
+		if( C == null ) throw new IllegalArgumentException("C");
+		if( P == null ) P = "x";
 		meta = new HashMap<>();
 		a = A;
 		c = C;
 		p = getPolicy(P);
 	}
 	SelectResponse(String A, String C, String P, Exception err) {
+		if( A == null ) throw new IllegalArgumentException("A");
+		if( C == null ) throw new IllegalArgumentException("C");
+		if( P == null ) P = "x";
 		meta = new HashMap<>();
 		a = A;
 		c = C;
@@ -35,6 +41,8 @@ public class SelectResponse {
 		setError(err);
 	}
 	SelectResponse(JSONObject item, ExecResponse source, String A, String C) { // note: this is not the whole response,
+		if( A == null ) throw new IllegalArgumentException("A");
+		if( C == null ) throw new IllegalArgumentException("C");
 		try {
 			execResponse = source;
 			a = item.getString("a");

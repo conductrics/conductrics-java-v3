@@ -134,7 +134,13 @@ public class RequestOptions {
 	 * This value will be used for a SelectResponse.getCode() if any errors occur.
 	 * Default value is "A", if setDefault() has not called.
 	 */
-	public String getDefault(String agentCode) { return defaultOptions.get(agentCode); }
+	public String getDefault(String agentCode) {
+		if( defaultOptions.containsKey(agentCode) ) {
+			return defaultOptions.get(agentCode);
+		} else {
+			return "A";
+		}
+	}
 	/** Set the default optionCode.
 	 * This value will be used for a SelectResponse.getCode() if any errors occur.
 	 * @param agentCode The code of the agent to apply the default to.
