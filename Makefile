@@ -31,7 +31,11 @@ Conductrics-${VERSION}.jar: ${CLASS_FILES} org/json/JSONObject.class
 test: .test-artifact all ${CLASS_FILES}
 	# All tests are passing
 
-maven/release/com/conductrics/Conductrics/${VERSION}/Conductrics-${VERSION}.jar: Conductrics-${VERSION}.jar
+maven-sync:
+	# Syncing contents of current Maven repo...
+	aws s3 sync s3://conductrics-maven-repo/ ./maven
+
+maven/release/com/conductrics/Conductrics/${VERSION}/Conductrics-${VERSION}.jar: maven-sync Conductrics-${VERSION}.jar
 	# Building Maven repo (release)...
 	mkdir -p ./maven/release
 	mvn deploy:deploy-file -Dfile=Conductrics-${VERSION}.jar -DgroupId=com.conductrics -DartifactId=Conductrics -Dversion=${VERSION} -Dpackaging=jar -Durl=file://`pwd`/maven/release
@@ -41,7 +45,7 @@ release: maven/release/com/conductrics/Conductrics/${VERSION}/Conductrics-${VERS
 	# Deploying Maven to S3 (release)...
 	aws s3 sync ./maven s3://conductrics-maven-repo/
 
-maven/snapshot/com/conductrics/Conductrics/${VERSION}/Conductrics-${VERSION}.jar: Conductrics-${VERSION}.jar
+maven/snapshot/com/conductrics/Conductrics/${VERSION}/Conductrics-${VERSION}.jar: maven-sync Conductrics-${VERSION}.jar
 	# Building Maven repo (snapshot)...
 	mkdir -p ./maven/snapshot
 	mvn deploy:deploy-file -Dfile=Conductrics-${VERSION}.jar -DgroupId=com.conductrics -DartifactId=Conductrics -Dversion=${VERSION} -Dpackaging=jar -Durl=file://`pwd`/maven/snapshot
@@ -54,4 +58,4 @@ snapshot: maven/snapshot/com/conductrics/Conductrics/${VERSION}/Conductrics-${VE
 clean:
 	rm -rf test/*.class org/json com/conductrics Conductrics.jar Conductrics-*.jar META-INF/ ./maven
 
-.PHONY: test clean publish
+.PHONY: test clean publish maven-sync
