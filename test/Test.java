@@ -393,7 +393,7 @@ public class Test {
 	static class AllowedVariantTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
-				.setAllowedVariants("a-example", "B");
+				.setAllowedVariations("a-example", "B");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
@@ -414,7 +414,7 @@ public class Test {
 	static class MetaDataTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
-				.setAllowedVariants("a-example", "A");
+				.setAllowedVariations("a-example", "A");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {
@@ -436,7 +436,7 @@ public class Test {
 	static class MetaDataNullTest extends TestCase {
 		@Override public void run() {
 			RequestOptions opts = new RequestOptions(null)
-				.setAllowedVariants("a-example", "B");
+				.setAllowedVariations("a-example", "B");
 			api.select( opts, "a-example", new Callback<SelectResponse>() {
 				public void onValue(SelectResponse outcome) {
 					try {

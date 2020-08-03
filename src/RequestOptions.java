@@ -162,24 +162,24 @@ public class RequestOptions {
 		return this;
 	}
 
-	/** Get the (limited set of) variants allowed for an agent.
-	 * Can return null, which means all possible variants are allowed.
+	/** Get the (limited set of) variations allowed for an agent.
+	 * Can return null, which means all possible variations are allowed.
 	 */
-	public List<String> getAllowedVariants(String agentCode) {
+	public List<String> getAllowedVariations(String agentCode) {
 		return allowed.get(agentCode);
 	}
-	/** Set the allowed variants for an agent.
+	/** Set the allowed variations for an agent.
 	 * Will constrain future calls to select(). 
 	 */
-	public RequestOptions setAllowedVariants(String agentCode, String... variants) {
-		return setAllowedVariants(agentCode, Arrays.asList(variants));
+	public RequestOptions setAllowedVariations(String agentCode, String... variations) {
+		return setAllowedVariations(agentCode, Arrays.asList(variations));
 	}
-	/** Set the allowed variants for an agent.
+	/** Set the allowed variations for an agent.
 	 * Will constrain future calls to select(). 
 	 */
-	public RequestOptions setAllowedVariants(String agentCode, List<String> variants) {
-		if( variants.size() > 0 ) {
-			allowed.put(agentCode, variants);
+	public RequestOptions setAllowedVariations(String agentCode, List<String> variations) {
+		if( variations.size() > 0 ) {
+			allowed.put(agentCode, variations);
 		}
 		return this;
 	}

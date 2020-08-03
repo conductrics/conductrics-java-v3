@@ -251,7 +251,7 @@ public class Conductrics {
 		} else if( opts.getConfirm() ) {
 			command.put("s", "ok");
 		}
-		List<String> allowed = opts.getAllowedVariants(agentCode);
+		List<String> allowed = opts.getAllowedVariations(agentCode);
 		if( allowed != null ) {
 			command.put("c", new JSONArray(allowed));
 		}
@@ -289,7 +289,7 @@ public class Conductrics {
 				} else if( opts.getConfirm() ) {
 					command.put("s", "ok");
 				}
-				List<String> allowed = opts.getAllowedVariants(agent);
+				List<String> allowed = opts.getAllowedVariations(agent);
 				if( allowed != null ) {
 					command.put("c", new JSONArray(allowed));
 				}
