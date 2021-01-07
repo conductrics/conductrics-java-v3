@@ -43,6 +43,7 @@ public class Test {
 		executor.execute(new DoubleRewardTest());
 		executor.execute(new FullSessionOfflineTest());
 		executor.execute(new ProvisionalRewardTest());
+		executor.execute(new ConditionsTest());
 	}
 
 	static void _assertEqual(String a, String b) throws AssertionError {
@@ -64,9 +65,12 @@ public class Test {
 	static class TestCase implements Runnable {
 		public boolean finished = false;
 		protected Conductrics api = new Conductrics(
-			"https://api-staging-2020.conductrics.com/owner_jesse/v3/agent-api",
-			"api-JQXuiRRrCRkKPXPhChMC"
+			"https://api-local.conductrics.com/ac-jesse/v3/agent-api",
+			"api-GBvsMASyLvmtQdHbpAgU"
 		);
+		
+		// "https://api-staging-2020.conductrics.com/owner_jesse/v3/agent-api",
+		// "api-JQXuiRRrCRkKPXPhChMC"
 
 		public TestCase() {}
 		public void finish(Error err) {
@@ -423,7 +427,7 @@ public class Test {
 						_assertEqual( outcome.getCode(), "A");
 						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
 						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
-						assert "12345".equals(outcome.getMeta("magic")) : "getMeta('magic') should be '12345' got " + outcome.getMeta("magic");
+						assert "Amagic".equals(outcome.getMeta("magic")) : "getMeta('magic') should be 'Amagic' got " + outcome.getMeta("magic");
 						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
@@ -445,7 +449,7 @@ public class Test {
 						_assertEqual( outcome.getCode(), "B");
 						assert outcome.getPolicy() == Policy.Random : "getPolicy() should be Random";
 						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
-						assert outcome.getMeta("magic") == null : "getMeta('magic') should be null";
+						assert "".equals(outcome.getMeta("magic")) : "getMeta('magic') should be empty";
 						finish(null);
 					} catch( AssertionError err ) {
 						finish(err);
@@ -604,6 +608,26 @@ public class Test {
 								}
 							}
 						});
+					} catch( AssertionError err ) {
+						finish(err);
+					}
+				}
+			});
+		}
+	}
+
+	static class ConditionsTest extends TestCase {
+		@Override public void run() {
+			RequestOptions opts = new RequestOptions(null);
+			String agentCode = "a-conditions";
+			api.select( opts, agentCode, new Callback<SelectResponse>() {
+				public void onValue(SelectResponse outcome) {
+					try {
+						assert outcome != null : "Outcome cannot be null";
+						_assertEqual( outcome.getAgent(), agentCode);
+						_assertEqual( outcome.getCode(), "C" );
+						assert outcome.getPolicy() == Policy.Fixed: "getPolicy() should be Fixed";
+						assert outcome.getStatus() == Status.Confirmed : "getStatus() should be Confirmed";
 					} catch( AssertionError err ) {
 						finish(err);
 					}
